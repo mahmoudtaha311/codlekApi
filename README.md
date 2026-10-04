@@ -56,7 +56,7 @@ Codlek.Application     → Core        أوامر/استعلامات بـMediatR
   Behaviors/                         التحقق قبل كل أمر
 Codlek.Infrastructure  → Application DbContext، التوكنات، Identity
 Codlek.Api             → الاتنين     كنترولرز، Program.cs قصير
-Codlek.Tests           → الأربعة     ٣٠٦ فحص
+Codlek.Tests           → الأربعة     ٣٤٣ فحص
 ```
 
 🔴 **نوع واحد في كل ملف.** مش قاعدة شكلية: `git log` على ملف واحد
