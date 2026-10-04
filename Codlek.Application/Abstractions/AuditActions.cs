@@ -12,6 +12,18 @@ namespace Codlek.Application.Abstractions;
 /// </summary>
 public static class AuditActions
 {
+    /*
+      🔴 **دي WebUser مش Technician.**
+
+      الفنيين ليهم أكواد تانية (`technician.*`) وجدول تاني خالص.
+      والخلط بيخلّي السجل يقول «اتعمل حساب فني» والحقيقة إن
+      اللي اتعمل حساب لوحة بصلاحيات مدير.
+    */
+    public const string WebUserCreated = "webuser.created";
+    public const string WebUserSuspended = "webuser.suspended";
+    public const string WebUserActivated = "webuser.activated";
+    public const string WebUserPasswordReset = "webuser.password_reset";
+
     public const string BrandCreated = "brand.created";
     public const string BrandUpdated = "brand.updated";
     public const string BrandAliasAdded = "brand.alias_added";

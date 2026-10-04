@@ -72,6 +72,7 @@ public static class DependencyInjection
         */
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IBrandRepository, BrandRepository>();
+        services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IContainerRepository, ContainerRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 
@@ -131,6 +132,18 @@ public static class DependencyInjection
             })
             .AddRoles<ApplicationRole>()
             .AddEntityFrameworkStores<AppDbContext>();
+
+        /*
+          🔴 **المطبّع ده بيوحّد مفتاح الدخول بين الموقع والراكة.**
+
+          Identity الافتراضية بتعمل `ToUpperInvariant`، والمشروع
+          (والبرنامج المكتبي) بيستعملوا `LoginName.Normalize` — حروف
+          صغيرة ومقصوصة على ٦٠.
+
+          ⚠️ ولو اتسابوا مختلفين، اسم يدخل على الراكة ومايدخلش
+          على الموقع.
+        */
+        services.Replace(ServiceDescriptor.Scoped<ILookupNormalizer, LoginNameNormalizer>());
 
         /*
           🔴 **السطر ده هو اللي بيخلّي الباسوردات الموجودة تشتغل.**
