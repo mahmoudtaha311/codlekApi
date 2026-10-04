@@ -124,6 +124,12 @@ public class OperationalSyncRepositoryTests(OperationalSyncDbFixture fixture)
         // ❌ بعد الحركة.
         Login(db, tenant, rack.Id, tech.Id, occurred.AddHours(1));
 
+        // ❌ نفس المحطة والفني بس متسجّل على ورشة تانية — بيانات متلخبطة
+        //    مالهاش تصرّح هنا.
+        var stray = NewTenant(db);
+        await db.SaveChangesAsync();
+        Login(db, stray, rack.Id, tech.Id, occurred.AddHours(-1));
+
         await db.SaveChangesAsync();
 
         var at = await new OperationalSyncRepository(db)
@@ -320,6 +326,39 @@ public class OperationalSyncRepositoryTests(OperationalSyncDbFixture fixture)
         });
 
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
+    }
+
+    /// <summary>
+    /// 🔴 <b>الأمر الموجود بييجي بأعطاله وقطعه.</b> من غيرهم المطبّق
+    /// بيشوف المجموعات فاضية، فبيضيف العطل الموجود تاني — والحفظ بيقع
+    /// على المفتاح الأساسي، يعني كل إعادة رفع لأمر فيه أعطال بتطلع ٥٠٠.
+    /// </summary>
+    [Fact]
+    public async Task An_existing_order_comes_with_its_issues_and_parts()
+    {
+        var (tenant, itemId) = await SeedWorkItemAsync();
+
+        using (var seed = fixture.Create())
+        {
+            seed.RepairWorkItemIssues.Add(new RepairWorkItemIssue
+            {
+                TenantId = tenant, WorkItemId = itemId, IssueCode = "KB-01",
+            });
+
+            seed.RepairParts.Add(new RepairPart
+            {
+                TenantId = tenant, WorkItemId = itemId, Name = "كيبورد",
+            });
+
+            await seed.SaveChangesAsync();
+        }
+
+        using var db = fixture.Create();
+
+        var row = await new OperationalSyncRepository(db).FindWorkItemAsync(tenant, itemId);
+
+        Assert.Equal("KB-01", Assert.Single(row!.Issues).IssueCode);
+        Assert.Equal("كيبورد", Assert.Single(row.Parts).Name);
     }
 
     [Fact]

@@ -745,4 +745,220 @@ public class OperationalSyncTests
 
         Assert.InRange(at, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(1));
     }
+
+    // =================================================================
+    //  ثغرات كشفها التحوير المقصود
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>السيرفر بيحكم بساعته هو — مش بساعة الراكة.</b> استلام
+    /// مكتوب بعد يومين من دلوقتي بيترفض «في المستقبل»، حتى لو الفني
+    /// داخل والنافذة مفتوحة.
+    /// </summary>
+    [Fact]
+    public async Task A_claim_dated_far_in_the_future_is_refused()
+    {
+        var h = Build();
+        var tech = Tech(h);
+
+        var dto = Item(h, assigned: tech.Id);
+        dto.ClaimedAtUtc = DateTime.UtcNow.AddDays(2);
+
+        var outcome = await h.Applier.ApplyWorkItemAsync(h.Source, dto);
+
+        Assert.Equal(OperationalSyncApplier.CapabilityDenied, outcome.Code);
+        Assert.Equal(OfflineAuthorisation.FutureMessage, outcome.Message);
+        Assert.Empty(h.Repo.Items);
+    }
+
+    /// <summary>
+    /// 🔴 <b>الإيقاف بيوصل للقرار — الحالة ووقتها الاتنين.</b> فني
+    /// اتوقف قبل الاستلام بنص ساعة مايقدرش يستلم، حتى لو نافذته
+    /// القديمة لسه سارية.
+    /// </summary>
+    [Fact]
+    public async Task A_claim_after_the_technician_was_suspended_is_refused()
+    {
+        var h = Build();
+        var tech = Tech(h);
+
+        var dto = Item(h, assigned: tech.Id);
+
+        tech.IsActive = false;
+        tech.SuspendedAtUtc = dto.ClaimedAtUtc!.Value.AddMinutes(-30);
+
+        var outcome = await h.Applier.ApplyWorkItemAsync(h.Source, dto);
+
+        Assert.Equal(OperationalSyncApplier.CapabilityDenied, outcome.Code);
+        Assert.Equal(OfflineAuthorisation.SuspendedMessage, outcome.Message);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>من غير وقت استلام، وقت البدء هو اللي بيتحسب — مش وقت
+    /// الفتح.</b> الفني دخل <b>بعد</b> الفتح وقبل البدء: بوقت الفتح
+    /// مفيش دخول قبله، فكان هيترفض على شغل مصرّح له فعلاً.
+    /// </summary>
+    [Fact]
+    public async Task Without_a_claim_time_the_start_time_decides()
+    {
+        var h = Build();
+        var tech = Tech(h, loggedIn: false);
+
+        var dto = Item(h, assigned: tech.Id, status: RepairStatus.InProgress);
+        dto.ClaimedAtUtc = null;
+        dto.OpenedAtUtc = DateTime.UtcNow.AddHours(-3);
+        dto.StartedAtUtc = DateTime.UtcNow.AddHours(-1);
+
+        h.Repo.Logins.Add((h.Source.RackId, tech.Id, DateTime.UtcNow.AddHours(-2)));
+
+        var outcome = await h.Applier.ApplyWorkItemAsync(h.Source, dto);
+
+        Assert.False(outcome.Rejected);
+        Assert.True(outcome.Applied);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>الحارس على الرجوع لورا بس.</b> أمر مقفول اترفع تاني
+    /// <b>بنفس الحالة</b> بياخد التعديل (ملاحظة، قطعة) — زي القديم
+    /// بالحرف. لو الحارس قفل كل رفع على أمر مقفول، تصحيح ملاحظة بعد
+    /// الإقفال كان هيضيع.
+    /// </summary>
+    [Fact]
+    public async Task A_closed_order_resent_with_the_same_status_still_takes_updates()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+
+        await h.Applier.ApplyWorkItemAsync(h.Source, Item(h, id: id, status: RepairStatus.Completed));
+
+        var again = Item(h, id: id, status: RepairStatus.Completed);
+        again.Notes = "اتغيّرت الشاشة";
+
+        var outcome = await h.Applier.ApplyWorkItemAsync(h.Source, again);
+
+        Assert.True(outcome.Applied);
+        Assert.Equal("اتغيّرت الشاشة", Assert.Single(h.Repo.Items).Notes);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والعلامة للمستني موافقة بس.</b> أمر اتوافق عليه والشغل بدأ
+    /// بعدها = شغل عادي، مش «اشتغل من غير موافقة».
+    /// </summary>
+    [Fact]
+    public async Task Bench_work_on_an_approved_order_is_not_flagged()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+
+        await h.Applier.ApplyWorkItemAsync(h.Source, Item(h, id: id));
+
+        var row = Assert.Single(h.Repo.Items);
+        row.Approval = RepairApproval.Approved;
+
+        await h.Applier.ApplyWorkItemAsync(h.Source, Item(h, id: id, status: RepairStatus.InProgress));
+
+        Assert.Equal(RepairStatus.InProgress, row.Status);
+        Assert.False(row.StartedWithoutApproval);
+    }
+
+    [Fact]
+    public async Task A_missing_open_time_becomes_now()
+    {
+        var h = Build();
+
+        var dto = Item(h);
+        dto.OpenedAtUtc = default;
+
+        await h.Applier.ApplyWorkItemAsync(h.Source, dto);
+
+        Assert.InRange(
+            Assert.Single(h.Repo.Items).OpenedAtUtc,
+            DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(1));
+    }
+
+    /// <summary>
+    /// 🔴 <b>حركة بفني من ورشة تانية بتترفض — مابتتسجّلش باسم
+    /// المحطة.</b>
+    /// </summary>
+    [Fact]
+    public async Task A_move_by_a_technician_outside_the_workshop_is_refused()
+    {
+        var h = Build();
+
+        var outcome = await h.Applier.ApplyWorkflowEventAsync(
+            h.Source, Move(h, DeviceWorkflowEventType.CustodyHandoff, Guid.NewGuid()));
+
+        Assert.Equal(OperationalSyncApplier.TechnicianNotFound, outcome.Code);
+        Assert.False(outcome.Retryable);
+        Assert.Empty(h.Workflow.Moves);
+    }
+
+    /// <summary>
+    /// 🔴 <b>الحركة بتتحاسب بوقتها هي — مش بوقت الرفع.</b> فني صلّح
+    /// الجهاز وهو مصرّح له، والصلاحية اتسحبت قبل ما الشغل يترفع: الشغل
+    /// ده حصل فعلاً ولازم يتسجّل.
+    /// </summary>
+    [Fact]
+    public async Task A_repair_move_timed_before_the_revocation_still_counts()
+    {
+        var h = Build();
+        var tech = Tech(h, canRepair: false);
+
+        tech.CapabilityChangedAtUtc = DateTime.UtcNow.AddMinutes(-30);
+
+        var dto = Move(h, DeviceWorkflowEventType.RepairCompleted, tech.Id);
+        dto.OccurredAtUtc = DateTime.UtcNow.AddHours(-1);
+
+        var outcome = await h.Applier.ApplyWorkflowEventAsync(h.Source, dto);
+
+        Assert.True(outcome.Applied);
+        Assert.Single(h.Workflow.Moves);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>كل خانة في الحركة بتوصل للمسجّل زي ما هي.</b> خانة ناقصة
+    /// هنا = حركة متسجّلة من غير وجهتها، والجهاز بيفضل في مرحلته
+    /// القديمة على اللوحة.
+    /// </summary>
+    [Fact]
+    public async Task The_move_reaches_the_recorder_with_every_field()
+    {
+        var h = Build();
+
+        var dto = Move(h, DeviceWorkflowEventType.SentToRepair);
+        dto.ToStage = (int)DeviceOperationalStage.NeedsRepair;
+        dto.ToTechnicianId = Guid.NewGuid();
+        dto.ToLocationId = Guid.NewGuid();
+        dto.ClearsHolder = true;
+        dto.RepairWorkItemId = Guid.NewGuid();
+        dto.BaselineReportId = Guid.NewGuid();
+        dto.BaselineIsFresh = true;
+        dto.Notes = "على الرف التاني";
+
+        await h.Applier.ApplyWorkflowEventAsync(h.Source, dto);
+
+        var move = Assert.Single(h.Workflow.Moves);
+
+        Assert.Equal(dto.DeviceId, move.DeviceId);
+        Assert.Equal(DeviceWorkflowEventType.SentToRepair, move.EventType);
+        Assert.Equal(DeviceOperationalStage.NeedsRepair, move.ToStage);
+        Assert.Equal(dto.ToTechnicianId, move.ToTechnicianId);
+        Assert.Equal(dto.ToLocationId, move.ToLocationId);
+        Assert.True(move.ClearsHolder);
+        Assert.Equal(dto.RepairWorkItemId, move.RepairWorkItemId);
+        Assert.Equal(dto.BaselineReportId, move.BaselineReportId);
+        Assert.True(move.BaselineIsFresh);
+        Assert.Equal("تسليم", move.Reason);
+        Assert.Equal("على الرف التاني", move.Notes);
+    }
+
+    [Fact]
+    public async Task A_move_without_a_stage_has_no_stage()
+    {
+        var h = Build();
+
+        await h.Applier.ApplyWorkflowEventAsync(h.Source, Move(h));
+
+        Assert.Null(Assert.Single(h.Workflow.Moves).ToStage);
+    }
 }
