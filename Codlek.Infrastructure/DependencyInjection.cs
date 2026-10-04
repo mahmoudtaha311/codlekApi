@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<IRepairRepository, RepairRepository>();
         services.AddScoped<IDeviceReference, DeviceReference>();
         services.AddScoped<ITenantCounters, TenantCounters>();
+        services.AddScoped<IDeviceWorkflowRecorder, DeviceWorkflowRecorder>();
 
         return services;
     }
