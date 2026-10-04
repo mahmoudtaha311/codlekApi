@@ -88,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<ITechnicianPasswords, TechnicianPasswords>();
         services.AddScoped<IRackRepository, RackRepository>();
         services.AddScoped<ITechnicianLoginRepository, TechnicianLoginRepository>();
+        services.AddScoped<IRackFeedRepository, RackFeedRepository>();
         services.AddScoped<IActivationCodeHasher, ActivationCodeHasher>();
         services.AddScoped<IRackKeys, RackKeys>();
         services.AddScoped<IRackAuthenticator, RackAuthenticator>();
