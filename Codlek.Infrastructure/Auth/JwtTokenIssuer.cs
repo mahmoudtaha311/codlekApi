@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Codlek.Application.Contracts.Auth;
 using Codlek.Application.Interfaces;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -82,7 +83,30 @@ public sealed class JwtTokenIssuer : ITokenIssuer
             {
                 new(JwtRegisteredClaimNames.Sub, subject.UserId.ToString()),
                 new(VersionClaim, subject.CredentialVersion.ToString(CultureInfo.InvariantCulture)),
-                new(TokenUseClaim, RefreshUse)
+                new(TokenUseClaim, RefreshUse),
+
+                /*
+                  🔴 **المعرّف العشوائي ده مش زيادة — من غيره النظام بيقع.**
+
+                  كل اللي جوّه توكن التجديد ثابت: مين، نسخته، نوعه.
+                  والوقت جوّاه بالثانية مش بأقل. يعني **توكنين اتعملو
+                  في نفس الثانية بيطلعو نفس النص بالحرف**.
+
+                  وده بيعمل حاجتين، التانية أسوأ:
+
+                  ١ · دخولتين في نفس الثانية = محاولة تكرار البصمة في
+                      الجدول، والفهرس الفريد بيرمي. يعني 500 في وش المستخدم.
+
+                  ٢ · 🔴 **واللفّ بيبقى شكل وبس.** التجديد بيلغي القديم
+                      ويعمل جديد — ولو الجديد طلع نفس النص، المستخدم
+                      بياخد توكن **ملغي من أول لحطة**. وأول ما يجرّب يجدد
+                      بيه، النظام بيقراه «توكن اتبدّل واتقدّم تاني» — يعني
+                      **سرقة**، وبيقفل كل جلساته.
+
+                  ⚠️ وتوكن الوصول مامحتاجهوش: هو مابيتخزّنش ومابيتبصّ
+                  عليه في أي جدول — نسختين متشابهين منه مابيعملوش حاجة.
+                */
+                new(JwtRegisteredClaimNames.Jti, NewTokenId())
             },
             now.AddDays(_options.RefreshTokenDays),
             now);
@@ -150,6 +174,10 @@ public sealed class JwtTokenIssuer : ITokenIssuer
             return null;
         }
     }
+
+    /// <summary>معرّف توكن — ١٦ بايت عشوائية آمنة.</summary>
+    private static string NewTokenId() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
 
     private string Write(List<Claim> claims, DateTime expires, DateTime now) =>
         new JwtSecurityTokenHandler().WriteToken(

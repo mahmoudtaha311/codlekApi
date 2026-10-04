@@ -8,25 +8,32 @@ namespace Codlek.Infrastructure.Data;
 ///
 /// <para>⚠️ <b>العنوان ده للأدوات بس.</b> بيتقرا من
 /// <c>CODLEK_DESIGN_CONNECTION</c>، والافتراضي قاعدة
-/// <c>codlek_shape</c> — وهي قاعدة <b>فاضية مخصوصة للمقارنة</b>، مش
-/// قاعدة الاختبار ولا الإنتاج. يعني أي أمر <c>ef</c> بيتنفّذ بالغلط
+/// <c>codlek_dev</c> — قاعدة تطوير محلية. مش قاعدة الاختبار
+/// ولا الإنتاج. يعني أي أمر <c>ef</c> بيتنفّذ بالغلط
 /// مايلمسش شغل حقيقي.</para>
 ///
-/// <para>🔴 والمشروع ده <b>عمره ما بيعمل هجرات على الإنتاج</b> —
-/// المشروع القديم هو اللي بيملك الـschema. الهجرات هنا أداة قياس:
-/// بنخلّي EF يبني القاعدة من فهمه، ونقارنها بالحقيقية. أي فرق معناه
-/// إن النقل غلط.</para>
+/// <para>🔴 <b>القاعدة اللي بنطوّر عليها.</b> الهجرات بتتعمل وبتتطبّق
+/// هنا بحرية — قاعدة محلية فاضية، وأي غلط فيها مايكلّفش حاجة.</para>
+///
+/// <para>🔴 <b>والقاعدة الوحيدة اللي بتحكم: الجداول الـ٣١ الموجودة
+/// ماتتغيّرش.</b> زيادة جدول جديد أو عمود جديد يقبل الفراغ = آمن،
+/// بيتعمل على الإنتاج وقت التحويل في دقيقة. أما تغيير عمود موجود
+/// (طوله، نوعه، هل يقبل الفراغ) = تعديل على جدول فيه شغل ورشة
+/// حقيقي، وده اللي بوابة <c>SCHEMA-GATE.md</c> موجودة عشانه.</para>
+///
+/// <para>⚠️ وده اللي بيخلّي التحويل في الآخر رخيص: المشروع الجديد
+/// بيتوصّل على قاعدة الإنتاج، وبيطبّق <b>الزيادات بس</b>.</para>
 /// </summary>
 public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
-    public const string ShapeDatabase =
-        "Server=localhost;Database=codlek_shape;Trusted_Connection=True;" +
+    public const string DevelopmentDatabase =
+        "Server=localhost;Database=codlek_dev;Trusted_Connection=True;" +
         "TrustServerCertificate=True;MultipleActiveResultSets=True";
 
     public AppDbContext CreateDbContext(string[] args)
     {
         string connection =
-            Environment.GetEnvironmentVariable("CODLEK_DESIGN_CONNECTION") ?? ShapeDatabase;
+            Environment.GetEnvironmentVariable("CODLEK_DESIGN_CONNECTION") ?? DevelopmentDatabase;
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlServer(connection)

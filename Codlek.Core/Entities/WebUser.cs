@@ -1,25 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Codlek.Core.Enums;
 
 namespace Codlek.Core.Entities;
-
-/// <summary>
-/// الشركة. النظام متعدد الشركات من أول يوم عشان لما تيجي شركة تانية
-/// منغيّرش قاعدة البيانات — كل استعلام بيترشّح بـ TenantId.
-/// </summary>
-public class Tenant
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-
-    [MaxLength(120)]
-    public string Name { get; set; } = "";
-
-    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
-
-    public List<WebUser> Users { get; set; } = new();
-    public List<Report> Reports { get; set; } = new();
-}
 
 /// <summary>
 /// حساب على الموقع. البصمة والملح بنفس صيغة البرنامج المكتبي
@@ -128,73 +111,4 @@ public class WebUser
         UserRole.Accountant => "محاسب",
         _ => "فني"
     };
-}
-
-/// <summary>
-/// سجل الإجراءات المهمة.
-///
-/// <para><b>حدود واضحة عشان منعملش أربع جداول مراجعة:</b>
-/// <c>LoginEvent</c> بيفضل للدخول وبس، و<c>ReportEdit</c> بيفضل لتعديلات
-/// الفحوصات وبيسافر جوّه <c>RawJson</c>. الجدول ده للإجراءات الإدارية
-/// وإجراءات النظام — اقتران راكة، إلغاء مفتاح، شك في استنساخ، تعارض هوية
-/// جهاز. ومفيش جدول خامس.</para>
-/// </summary>
-public class AuditEvent
-{
-    public long Id { get; set; }
-
-    public Guid TenantId { get; set; }
-
-    /// <summary>معرّف بيتولّد على الراكة لما الحدث أصله من هناك — بيمنع التكرار.</summary>
-    public Guid? EventId { get; set; }
-
-    public DateTime OccurredAtUtc { get; set; } = DateTime.UtcNow;
-    public DateTime RecordedAtUtc { get; set; } = DateTime.UtcNow;
-
-    /// <summary>User · Rack · System</summary>
-    [MaxLength(20)]
-    public string ActorType { get; set; } = "System";
-
-    public Guid? ActorUserId { get; set; }
-    public Guid? ActorRackId { get; set; }
-
-    [MaxLength(120)]
-    public string ActorName { get; set; } = "";
-
-    /// <summary>rack.paired · rack.revoked · rack.clone_suspected …</summary>
-    [MaxLength(60)]
-    public string Action { get; set; } = "";
-
-    [MaxLength(40)]
-    public string EntityType { get; set; } = "";
-
-    public Guid? EntityId { get; set; }
-
-    [MaxLength(30)]
-    public string EntityCode { get; set; } = "";
-
-    [MaxLength(400)]
-    public string Summary { get; set; } = "";
-
-    public string DataJson { get; set; } = "";
-
-    [MaxLength(60)]
-    public string Ip { get; set; } = "";
-}
-
-/// <summary>
-/// سجل دخول. بيخلّي المدير يشوف مين فتح الموقع وإمتى ومن فين —
-/// نفس منطق «الراكة بتتشارك»، بس هنا للموقع.
-/// </summary>
-public class LoginEvent
-{
-    public long Id { get; set; }
-    public Guid TenantId { get; set; }
-
-    [MaxLength(60)] public string Username { get; set; } = "";
-    [MaxLength(120)] public string DisplayName { get; set; } = "";
-    public bool Success { get; set; }
-    [MaxLength(200)] public string Reason { get; set; } = "";
-    [MaxLength(60)] public string Ip { get; set; } = "";
-    public DateTime AtUtc { get; set; } = DateTime.UtcNow;
 }

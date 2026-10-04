@@ -1,3 +1,4 @@
+using Codlek.Application.Contracts.Auth;
 using Codlek.Application.Interfaces;
 using Codlek.Infrastructure.Auth;
 using Microsoft.Extensions.Options;
@@ -314,5 +315,70 @@ public class TokenIssuerTests
             .ReadJwtToken(pair.AccessToken);
 
         Assert.DoesNotContain(token.Claims, c => c.Type == JwtTokenIssuer.MustChangeClaim);
+    }
+
+    // =================================================================
+    //  التوكن لازم يبقى فريد — باج اتمسك فعلاً
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>باج حقيقي اتكشف وقت فحوص القاعدة — الفحص ده بيمنع
+    /// رجوعه.</b>
+    ///
+    /// <para>كل اللي جوّه توكن التجديد كان ثابت: مين، نسخته،
+    /// نوعه، والوقت بالثانية. يعني توكنين في نفس الثانية
+    /// كانو بيطلعو <b>نفس النص بالحرف</b>.</para>
+    ///
+    /// <para>والنتيجة: دخولتين في نفس الثانية بترمي على الفهرس
+    /// الفريد، <b>واللفّ بيبقى شكل وبس</b> — التوكن الجديد
+    /// بيطلع هو نفسه القديم اللي لسه ملغي حالاً.</para>
+    ///
+    /// <para>⚠️ والـ١٦ فحص اللي فوق كلهم عدّو وهو موجود، لأن مفيش
+    /// واحد فيهم كان بيعمل توكنين لنفس المستخدم ويقارنهم.</para>
+    /// </summary>
+    [Fact]
+    public void Two_refresh_tokens_for_the_same_user_are_never_identical()
+    {
+        var issuer = Issuer();
+        var subject = Someone();
+
+        var first = issuer.Issue(subject);
+        var second = issuer.Issue(subject);
+
+        Assert.NotEqual(first.RefreshToken, second.RefreshToken);
+    }
+
+    /// <summary>
+    /// ⚠️ ومش توكنين بس — عشرة ورا بعض كلهم مختلفين.
+    ///
+    /// <para>الفحص بتوكنين بس ينفع يعدّي بالحظ لو التوكن فيه
+    /// عدّاد. عشرة فريدين معناها فيه عشوائية فعلاً.</para>
+    /// </summary>
+    [Fact]
+    public void Ten_refresh_tokens_in_a_row_are_all_distinct()
+    {
+        var issuer = Issuer();
+        var subject = Someone();
+
+        var tokens = Enumerable.Range(0, 10)
+            .Select(_ => issuer.Issue(subject).RefreshToken)
+            .ToHashSet();
+
+        Assert.Equal(10, tokens.Count);
+    }
+
+    /// <summary>
+    /// ⚠️ والمعرّف العشوائي ماكسرش الفك: التوكن لسه بيتقرا.
+    /// </summary>
+    [Fact]
+    public void A_token_with_an_id_still_reads_back()
+    {
+        var issuer = Issuer();
+        var subject = Someone(version: 7);
+
+        var claims = issuer.ReadRefresh(issuer.Issue(subject).RefreshToken);
+
+        Assert.NotNull(claims);
+        Assert.Equal(7, claims.CredentialVersion);
     }
 }

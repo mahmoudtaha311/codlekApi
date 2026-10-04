@@ -1,16 +1,18 @@
 using Codlek.Core.Entities;
+using Codlek.Core.Entities.Auth;
 using Codlek.Core.Enums;
 using Codlek.Core.Text;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Codlek.Infrastructure.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
-    public DbSet<WebUser> Users => Set<WebUser>();
+    public DbSet<WebUser> WebUsers => Set<WebUser>();
     /// <summary>الرواكة — الهاردات اللي بتقلّع اللابات وبترفع الفحوصات.</summary>
     public DbSet<Rack> Racks => Set<Rack>();
 
@@ -52,6 +54,14 @@ public class AppDbContext : DbContext
 
     /// <summary>الفنيون — بشر بيشتغلوا على محطات الفحص، مش مستخدمي موقع.</summary>
     public DbSet<Technician> Technicians => Set<Technician>();
+
+    /// <summary>
+    /// توكنات التجديد — <b>جدول جديد مش موجود في المشروع القديم</b>.
+    ///
+    /// <para>القديم بيستعمل كوكي، فمكانش محتاجه. وده اللي بيخلّي
+    /// إلغاء جلسة واحدة ممكن من غير ما نقطع باقي أجهزة صاحبها.</para>
+    /// </summary>
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     /// <summary>محاولات دخول الفنيين من المحطات — تدقيق وتقييد تخمين.</summary>
     public DbSet<TechnicianLoginAttempt> TechnicianLoginAttempts => Set<TechnicianLoginAttempt>();
@@ -555,6 +565,69 @@ public class AppDbContext : DbContext
         // فهرس صفحة «مراحل الأجهزة» — المرحلة مع الموقع.
         b.Entity<Device>()
             .HasIndex(d => new { d.TenantId, d.OperationalStage });
+
+        // =============================================================
+        //  توكنات التجديد — جدول جديد
+        // =============================================================
+
+        /*
+          🔴 **فريد على البصمة.** التجديد بيدوّر بالبصمة وبياخد صف
+          واحد. صفّين بنفس البصمة معناه إن اللي بيجدّد بياخد واحد منهم
+          بالصدفة — فيلغي ده ويسيب ده، والتوكن يفضل شغّال بعد ما
+          المفروض اتقفل.
+        */
+        b.Entity<RefreshToken>()
+            .HasIndex(t => t.TokenHash)
+            .IsUnique();
+
+        // ⚠️ «اقفل كل جلسات الحساب ده» بيترشّح بالمستخدم.
+        b.Entity<RefreshToken>()
+            .HasIndex(t => new { t.UserId, t.RevokedAtUtc });
+
+        // ⚠️ وتنضيف المنتهي بيترشّح بالتاريخ.
+        b.Entity<RefreshToken>()
+            .HasIndex(t => t.ExpiresAtUtc);
+
+
+        // =============================================================
+        //  جداول Identity — المستخدمين والأدوار
+        // =============================================================
+
+        // 🔴 **اسم جدول `WebUser` مكتوب بالإيد دلوقتي، وده مش تحسين —
+        // ده إصلاح لحاجة كانت هتوقع.**
+        //
+        // اسم الجدول كان بييجي من اسم خاصية الـDbSet: `Users`. ولما
+        // الكلاس ورث `IdentityDbContext`، بقى فيه خاصية اسمها `Users`
+        // كمان بتاعة مستخدمي Identity — اسم واحد لحاجتين. فاضطرينا
+        // نسمّي القديمة `WebUsers`.
+        //
+        // ولو سكتنا بعد التسمية، EF كان هيستنتج اسم الجدول من الاسم
+        // الجديد ويطلّع هجرة بتعمل `RENAME` لجدول فيه **كل حسابات
+        // الورشة**. والسطر ده بيقطع الصلة بين اسم الخاصية واسم الجدول
+        // خلاص: الخاصية تتسمّى أي حاجة، والجدول يفضل `Users`.
+        b.Entity<WebUser>().ToTable("Users");
+
+        /*
+          ⚠️ **الجدولين بيعيشوا مع بعض فترة التحويل — ودي مش مشكلة
+          بالعكس، دي اللي بتخلّي القديم مايقفش.**
+
+          `Users`        ← المشروع القديم بيقرا ويكتب فيه، شغّال
+          `AspNetUsers`  ← المشروع الجديد، فاضي لحد التحويل
+
+          ونقل الحسابات بيحصل **مرة واحدة وقت التحويل**، مش دلوقتي. لأنه
+          لو اتعمل من دلوقتي، أي حساب جديد بيتعمل من اللوحة القديمة
+          مايبانش في الجديد — فنبقى عندنا نسختين بتفترقوا كل يوم.
+        */
+
+        // الشركة — نفس قاعدة باقي النظام: كل استعلام بيترشّح بيها.
+        b.Entity<ApplicationUser>()
+            .HasOne(u => u.Tenant)
+            .WithMany()
+            .HasForeignKey(u => u.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        b.Entity<ApplicationUser>()
+            .HasIndex(u => new { u.TenantId, u.Code });
 
         base.OnModelCreating(b);
     }

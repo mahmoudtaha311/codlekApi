@@ -1,36 +1,63 @@
 using Codlek.Api;
+using Codlek.Api.Middlewares;
 using Codlek.Application;
 using Codlek.Infrastructure;
+using Codlek.Infrastructure.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
-/*
-  🔴 **الملف ده يفضل قصير — ده كل الفكرة.**
-
-  في المشروع القديم `Program.cs` وصل ١٬٢٤٨ سطر: تسجيل خدمات + سياسات
-  + وسطاء + شغل بدء التشغيل + ١٣ نقطة نهاية مكتوبة جوّاه. وهو أكتر ملف
-  اتغيّر في المشروع كله (٣٢ مرة) — يعني كل حاجة بتعدّي من هنا، وأي حد
-  جديد بيفتحه ويسيبه.
-
-  كل طبقة بتسجّل نفسها في `DependencyInjection.cs` بتاعها، والملف ده
-  بينده عليهم وبس.
-*/
+builder.Services.AddControllers();
+builder.Services.AddOpenApi();
 
 builder.Services.AddApplicationServices();
-builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddInfrastructureServices(
+    builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddApiServices(builder.Configuration);
+
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
-app.UseApiPipeline();
-app.Run();
+app.UseExceptionHandler();
+
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
 
 /*
-  ⚠️ **موجود عشان فحوص الـAPI تقدر تقوّم السيرفر**
-  (`WebApplicationFactory<Program>`).
+  🔴 **`UseAuthentication` قبل `UseAuthorization` — والاتنين لازمين.**
 
-  ⚠️ **ومن غير `namespace` عن قصد.** في المشروع القديم `Program`
-  و`Policies` و`SessionUser` في الـglobal namespace، و٨٧ ملف فحص
-  بيلاقوهم كده. أي `namespace` هنا بيكسرهم كلهم.
+  المشروع المرجعي فيه `UseAuthorization` لوحدها، ومفيش
+  `UseAuthentication`. والنتيجة إن إعدادات التوكن كلها متظبّطة
+  و**مابتتطبّقش**: كل طلب بيوصل مجهول الهوية، فـ`[Authorize]` بترفض كل
+  حاجة و`User` بيبقى فاضي.
+
+  ⚠️ والترتيب نفسه مهم: `UseAuthorization` بتسأل «مين ده؟»، و
+  `UseAuthentication` هي اللي بتجاوب. لو اتقلبوا، بتسأل قبل ما حد
+  يجاوب — ونفس النتيجة بالظبط.
 */
-public partial class Program { }
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllers();
+
+/*
+  🔴 **زرع الأدوار بعد البناء وقبل التشغيل.**
+
+  لو اتعمل جوّه طلب، أول مستخدم بيدخل بياخد تأخير، وطلبين في نفس
+  اللحظة بيحاولوا يزرعوا نفس الدور. وهنا بيحصل مرة واحدة على خط
+  واحد.
+
+  ⚠️ وفشله بيمنع الإقلاع عن قصد — راجع `IdentitySeeder`.
+*/
+using (var scope = app.Services.CreateScope())
+{
+    int added = await scope.ServiceProvider
+        .GetRequiredService<IdentitySeeder>()
+        .SeedRolesAsync();
+
+    if (added > 0)
+        app.Logger.LogInformation("اتزرع {Count} دور جديد.", added);
+}
+
+app.Run();
