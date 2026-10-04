@@ -92,7 +92,7 @@ public static class DependencyInjection
             .AddIdentityCore<ApplicationUser>(o =>
             {
                 /*
-                  🔴 **١٢ بدل ٤ — وده فرق مقصود عن المشروع القديم.**
+                  🔴 **٨ بدل ٤ — وده فرق مقصود عن المشروع القديم.**
 
                   القديم فيه `MinPasswordLength = 4`. وأربع حروف
                   بتتخمّن بالقوة في ثواني.
