@@ -16,7 +16,7 @@ namespace Codlek.Application.Interfaces;
 /// غير نت.</para>
 ///
 /// <para>⚠️ ومفيش <c>Verify</c> هنا لحد دلوقتي: التحقق بيحصل في
-/// نقطة تسجيل الراكة، ودي مرحلة <c>/api/v1/rack/*</c>.</para>
+/// <c>POST /api/v2/racks/register</c>، ودي مرحلة لوحدها.</para>
 /// </summary>
 public interface IActivationCodeHasher
 {

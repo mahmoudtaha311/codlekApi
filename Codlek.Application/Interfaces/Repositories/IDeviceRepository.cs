@@ -39,6 +39,88 @@ public interface IDeviceRepository
     Task<Device?> FindByCodeAsync(
         Guid tenantId, string publicCode, CancellationToken ct = default);
 
+    /// <summary>
+    /// كل لاب الكود ده يخصّه — <b>الحالي والتاريخي</b>.
+    ///
+    /// <para>🔴 <b>ده اللي بيخلّي الاستيكر القديم يفضل شغّال.</b>
+    /// المطابقة على <c>PublicCode</c> لوحدها معناها إن أول ما اللاب
+    /// ياخد كود جديد، القديم يبقى ورقة مالهاش معنى. وكل كود عدّى على
+    /// اللاب متسجّل كمرساة <c>CompanyCode</c>، فالبحث بيعدّي
+    /// عليهم.</para>
+    ///
+    /// <para>🔴 <b>والمدموج <u>داخل</u>.</b> الكود المتقاعد مطبوع على
+    /// ليبل ملزوق على لاب حقيقي — فلترة المدموجين هنا كانت بتخلّي
+    /// الفني يمسح استيكر موجود في إيده ويلاقي «مش موجود».</para>
+    ///
+    /// <para>⚠️ <b>وفي القديم فيه تعليق بيقول العكس</b> («المدموجة
+    /// مابتتعرضش — <c>Scoped</c> بيشيلهم») وهو <b>غلط</b>:
+    /// <c>Scoped</c> بيقيّد بالشركة وبس، واللي بيشيل المدموجين هو
+    /// <c>ScopedActive</c>. الكود كان صح والتعليق كان قديم —
+    /// واللي اتنقل هنا هو السلوك مش التعليق.</para>
+    ///
+    /// <para>⚠️ والترتيب مقصود: <b>الحالي الأول</b>.</para>
+    /// </summary>
+    /// <param name="code">
+    /// الكود بعد ما <c>DeviceScan.Parse</c> يقراه — <b>كبير الحروف</b>.
+    /// </param>
+    /// <param name="normalizedCode">
+    /// 🔴 <b>موحّد بـ<c>ArabicText.Normalize</c>، مش
+    /// <c>IdentityValues.Normalize</c>.</b>
+    ///
+    /// <para>عمود <c>NormalizedValue</c> في مرساة <c>CompanyCode</c>
+    /// بيتكتب بالمطبّع <b>العربي</b> (من خدمة المزامنة)، فالمقارنة
+    /// لازم تكون بنفسه. والمطبّع العربي <b>مابيكبّرش الحروف</b> —
+    /// فالكود لازم يكون كبير خلاص قبل ما يوصل هنا، وده اللي
+    /// <c>DeviceScan.Parse</c> بيضمنه.</para>
+    /// </param>
+    Task<IReadOnlyList<DeviceCodeHit>> ResolveCodeAsync(
+        Guid tenantId, string code, string normalizedCode, CancellationToken ct = default);
+
+    // =================================================================
+    //  صفحة اللاب
+    // =================================================================
+
+    /// <summary>
+    /// لاب واحد بمعرّفه — <b>مقيّد بالشركة</b>.
+    ///
+    /// <para>🔴 <b>ومقصود إنها مش <c>FindAsync(id)</c>.</b> الأخيرة
+    /// بتجيب الصف بمفتاحه من غير ما تبص على الشركة، فمعرّف متخمّن أو
+    /// منسوخ من شركة تانية كان هيفتح صفحتها.</para>
+    ///
+    /// <para>⚠️ <b>وبترجّع المدموج كمان.</b> صفحة اللاب هي صفحة
+    /// تاريخه: اللاب اللي اندمج في غيره صفحته لازم تفتح وتقول إنه
+    /// اندمج، مش ترجّع <c>404</c>.</para>
+    /// </summary>
+    Task<Device?> FindDetailAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// مراسي هوية اللاب — <b>والملغية معاها</b>.
+    ///
+    /// <para>🔴 <b>فيه نسختين من فلتر المراسي في المشروع:</b> واحدة
+    /// بتاخد النشطة بس (للمطابقة والبحث)، ودي بتاخد <b>الكل</b>.
+    /// المرساة اللي اتلغت هي اللي بتفسّر ليه بوردة اتغيّرت أو هارد
+    /// اتبدّل — إخفاؤها بيخلّي الصفحة تقول حاجة ناقصة.</para>
+    ///
+    /// <para>⚠️ والترتيب: النشطة الأول، وبعدين بالنوع.</para>
+    /// </summary>
+    Task<IReadOnlyList<DeviceIdentifierRow>> IdentifiersAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// فحوص اللاب — صفحة + العدد الكلي.
+    ///
+    /// <para>⚠️ <b>والممسوح مستبعد.</b> الفحص الممسوح بيفضل في
+    /// القاعدة كدليل، بس عدّه في تاريخ اللاب بيدّي رقم غلط.</para>
+    /// </summary>
+    Task<(IReadOnlyList<DeviceTestRow> Rows, int TotalItems)> TestsAsync(
+        Guid tenantId, Guid deviceId, int page, int pageSize,
+        CancellationToken ct = default);
+
+    /// <summary>ملاحظات اللاب — الأحدث الأول.</summary>
+    Task<IReadOnlyList<DeviceNote>> NotesAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
+
     /// <summary>أسماء الجهات اللي في الصفحة — قراية واحدة.</summary>
     Task<IReadOnlyDictionary<Guid, string>> LocationNamesAsync(
         Guid tenantId, IEnumerable<Guid?> ids, CancellationToken ct = default);

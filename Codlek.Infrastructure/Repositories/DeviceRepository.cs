@@ -278,6 +278,148 @@ public sealed class DeviceRepository(AppDbContext db) : IDeviceRepository
         db.Devices.AsNoTracking()
             .FirstOrDefaultAsync(d => d.TenantId == tenantId && d.PublicCode == publicCode, ct);
 
+    /// <summary>
+    /// 🔴 <b>استعلامين: الكود الحالي، وبعدين التاريخ.</b>
+    ///
+    /// <para>⚠️ <b>والمدموج داخل في الاتنين</b> — الكود المتقاعد
+    /// مطبوع على ليبل ملزوق على لاب حقيقي. (راجع التعليق على
+    /// <c>IDeviceRepository.ResolveCodeAsync</c>: تعليق القديم هنا
+    /// كان بيقول العكس وكان غلط.)</para>
+    ///
+    /// <para>⚠️ والاستعلام التاني مابيتعملش خالص لو مفيش قيمة
+    /// موحّدة، ومابيتعملش لو التاريخ مالقاش حاجة جديدة — مفيش قراية
+    /// تالتة على الفاضي.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<DeviceCodeHit>> ResolveCodeAsync(
+        Guid tenantId, string code, string normalizedCode, CancellationToken ct = default)
+    {
+        var scoped = db.Devices.AsNoTracking().Where(d => d.TenantId == tenantId);
+
+        var current = await scoped
+            .Where(d => d.PublicCode == code)
+            .Select(d => new { d.Id, d.PublicCode })
+            .ToListAsync(ct);
+
+        var hits = current
+            .Select(d => new DeviceCodeHit(d.Id, d.PublicCode, true))
+            .ToList();
+
+        if (normalizedCode.Length == 0) return hits;
+
+        var historical = await db.DeviceIdentifiers.AsNoTracking()
+            .Where(i => i.TenantId == tenantId
+                     && i.Kind == DeviceIdentifierKind.CompanyCode
+                     && i.NormalizedValue == normalizedCode)
+            .Select(i => i.DeviceId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var extra = historical.Where(id => hits.All(h => h.DeviceId != id)).ToList();
+
+        if (extra.Count == 0) return hits;
+
+        /*
+          ⚠️ **قراية تانية على الأجهزة، مش ضم في نفس الاستعلام.**
+
+          المرساة بتدّي معرّفات، والعرض محتاج الكود الحالي لكل واحد
+          منهم — واللاب اللي مرساته موجودة وصفه مش موجود (تنظيف
+          قديم) مالوش يطلع في النتيجة.
+        */
+        var rows = await scoped
+            .Where(d => extra.Contains(d.Id))
+            .Select(d => new { d.Id, d.PublicCode })
+            .ToListAsync(ct);
+
+        hits.AddRange(rows.Select(d => new DeviceCodeHit(d.Id, d.PublicCode, false)));
+
+        return hits;
+    }
+
+    // =================================================================
+    //  صفحة اللاب
+    // =================================================================
+
+    /// <summary>
+    /// ⚠️ <b>من غير فلتر على المدموج</b> — صفحة اللاب هي صفحة
+    /// تاريخه. والتقييد بالشركة هو الحاجز.
+    /// </summary>
+    public Task<Device?> FindDetailAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default) =>
+        db.Devices.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == deviceId && d.TenantId == tenantId, ct);
+
+    /// <summary>
+    /// 🔴 <b>من غير <c>IsActive</c></b> — الملغية جزء من التاريخ.
+    ///
+    /// <para>⚠️ والترتيب <c>IsActive</c> تنازلي عشان النشطة تطلع
+    /// الأول، وبعدين بالنوع عشان نفس النوع يبقى جنب بعضه.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<DeviceIdentifierRow>> IdentifiersAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default) =>
+        await db.DeviceIdentifiers.AsNoTracking()
+            .Where(i => i.TenantId == tenantId && i.DeviceId == deviceId)
+            .OrderByDescending(i => i.IsActive)
+            .ThenBy(i => i.Kind)
+
+            // ⚠️ فاصل تعادل: نفس النوع ممكن يكون ليه أكتر من مرساة
+            // (هاردين)، ومن غيره الترتيب بيتقلب بين التحديثات.
+            .ThenBy(i => i.Id)
+            .ToListAsync(ct);
+
+    /// <summary>
+    /// ⚠️ <b>عدد المراحل استعلام فرعي، مش <c>Include</c>.</b>
+    /// صفحة فيها ٢٥ فحص بـ<c>Include(Steps)</c> كانت بتسحب آلاف صفوف
+    /// عشان تعدّها.
+    /// </summary>
+    public async Task<(IReadOnlyList<DeviceTestRow> Rows, int TotalItems)> TestsAsync(
+        Guid tenantId, Guid deviceId, int page, int pageSize,
+        CancellationToken ct = default)
+    {
+        var q = Reports(tenantId).Where(r => r.DeviceId == deviceId);
+
+        int total = await q.CountAsync(ct);
+
+        var rows = await q
+            .OrderByDescending(r => r.StartedAtUtc)
+
+            // 🔴 فاصل تعادل: دفعة فحوص اترفعت من نفس المزامنة بتاخد
+            //    نفس وقت البداية بالمللي ثانية.
+            .ThenBy(r => r.Id)
+
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(r => new DeviceTestRow(
+                r.Id,
+                r.StartedAtUtc,
+                r.EndedAtUtc,
+                r.DurationMs,
+                r.TechnicianId,
+                r.TechnicianName,
+                r.TechnicianCode,
+                r.SourceRackId,
+                r.PassCount,
+                r.FailCount,
+                r.ErrorCount,
+                r.NotPresentCount,
+                r.SkipCount,
+                r.Steps.Count,
+                r.GeneralNote))
+            .ToListAsync(ct);
+
+        return (rows, total);
+    }
+
+    public async Task<IReadOnlyList<DeviceNote>> NotesAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default) =>
+        await db.DeviceNotes.AsNoTracking()
+            .Where(n => n.TenantId == tenantId && n.DeviceId == deviceId)
+            .OrderByDescending(n => n.CreatedAtUtc)
+
+            // 🔴 فاصل تعادل: دفعة ملاحظات من نفس الإجراء (تسليم ٥٠
+            // لاب) بتاخد نفس الوقت بالحرف.
+            .ThenByDescending(n => n.Id)
+            .ToListAsync(ct);
+
     // =================================================================
     //  أسماء الصفحة — قراية واحدة لكل جدول
     // =================================================================

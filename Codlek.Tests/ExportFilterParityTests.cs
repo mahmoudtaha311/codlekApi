@@ -51,6 +51,26 @@ public class ExportFilterParityTests
             Guid t, string code, CancellationToken ct = default) =>
             Task.FromResult<Device?>(null);
 
+        public Task<IReadOnlyList<DeviceCodeHit>> ResolveCodeAsync(
+            Guid t, string code, string normalized, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<DeviceCodeHit>>([]);
+
+        public Task<Device?> FindDetailAsync(
+            Guid t, Guid id, CancellationToken ct = default) =>
+            Task.FromResult<Device?>(null);
+
+        public Task<IReadOnlyList<DeviceIdentifierRow>> IdentifiersAsync(
+            Guid t, Guid id, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<DeviceIdentifierRow>>([]);
+
+        public Task<IReadOnlyList<DeviceNote>> NotesAsync(
+            Guid t, Guid id, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<DeviceNote>>([]);
+
+        public Task<(IReadOnlyList<DeviceTestRow> Rows, int TotalItems)> TestsAsync(
+            Guid t, Guid id, int page, int size, CancellationToken ct = default) =>
+            Task.FromResult<(IReadOnlyList<DeviceTestRow>, int)>(([], 0));
+
         public Task<IReadOnlyDictionary<Guid, string>> LocationNamesAsync(
             Guid t, IEnumerable<Guid?> ids, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());

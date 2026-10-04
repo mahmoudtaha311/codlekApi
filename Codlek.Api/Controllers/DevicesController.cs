@@ -3,6 +3,10 @@ using Codlek.Api.Extensions;
 using Codlek.Application.Contracts.Common;
 using Codlek.Application.Contracts.Devices;
 using Codlek.Application.Features.Devices.GetDevices;
+using Codlek.Application.Features.Devices.GetIdentifiers;
+using Codlek.Application.Features.Devices.GetNotes;
+using Codlek.Application.Features.Devices.GetTests;
+using Codlek.Application.Features.Devices.LookupDevice;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,6 +61,64 @@ public sealed class DevicesController(ISender sender) : ControllerBase
             new GetDevicesQuery(
                 search, status, confidence, outcome, technician, rack, from, to,
                 stage, sort, container, flag, handover, location, page, pageSize), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    /// <summary>
+    /// مسح كود لاب — <b>مطابقة تامة</b>.
+    ///
+    /// <para>🔴 <b>ودي مش البحث.</b> البحث في القايمة بيمشي على
+    /// <c>LIKE</c>؛ ده بياخد قيمة واحدة من ماسح باركود والمطلوب يا
+    /// اللاب ده يا «مش موجود».</para>
+    ///
+    /// <para>⚠️ <b>و<c>lookup</c> قبل <c>{id:guid}</c> في الترتيب:</b>
+    /// القيد <c>:guid</c> بيمنع التصادم أصلاً، بس الترتيب مكتوب كده
+    /// عشان اللي بيقرا مايحتاجش يعرف الحكاية دي.</para>
+    /// </summary>
+    [HttpGet("lookup")]
+    [ProducesResponseType<DeviceLookupResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Lookup([FromQuery] string? code, CancellationToken ct)
+    {
+        var result = await sender.Send(new LookupDeviceQuery(code), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    /// <summary>
+    /// مراسي هوية اللاب — <b>والملغية معاها</b>.
+    ///
+    /// <para>🔴 المرساة اللي اتلغت هي اللي بتفسّر ليه بوردة اتغيّرت
+    /// أو هارد اتبدّل. إخفاؤها بيخلّي الصفحة تقول حاجة ناقصة.</para>
+    /// </summary>
+    [HttpGet("{id:guid}/identifiers")]
+    [ProducesResponseType<IReadOnlyList<DeviceIdentifierItem>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Identifiers(Guid id, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDeviceIdentifiersQuery(id), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    [HttpGet("{id:guid}/notes")]
+    [ProducesResponseType<IReadOnlyList<DeviceNoteItem>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Notes(Guid id, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDeviceNotesQuery(id), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    [HttpGet("{id:guid}/tests")]
+    [ProducesResponseType<PagedResult<DeviceTestItem>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Tests(
+        Guid id, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDeviceTestsQuery(id, page, pageSize), ct);
 
         return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
     }

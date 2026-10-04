@@ -127,7 +127,9 @@ public static class AuditActions
       بيعدّي عليه.
     */
 
-    /// <summary>بيتكتب من نقطة تسجيل الراكة — مرحلة <c>/api/v1/rack/*</c>.</summary>
+    /// <summary>
+    /// بيتكتب من <c>POST /api/v2/racks/register</c> — مرحلة الراكة.
+    /// </summary>
     public const string RackPaired = "rack.paired";
 
     /// <summary>بيتكتب لما راكة تطلع بمعرّف تثبيت مكرر.</summary>
