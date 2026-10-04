@@ -21,8 +21,22 @@ public abstract class SqlServerDbFixture : IDisposable
 {
     protected abstract string DatabaseName { get; }
 
+    /// <summary>
+    /// لاحقة على اسم القاعدة من <c>CODLEK_TEST_DB_SUFFIX</c> — فاضية
+    /// في العادي.
+    ///
+    /// <para>⚠️ <b>وموجودة عشان مجموعتين فحوص يشتغلوا مع بعض.</b>
+    /// التحوير المقصود بيشغّل المجموعة كلها عشرات المرات في نسخة
+    /// منفصلة من الريبو، والشغل العادي بيشغّلها في الأصلية — ومن غير
+    /// لاحقة الاتنين بيعملوا حذف وإنشاء على <b>نفس القواعد</b> في نفس
+    /// اللحظة، والفحوص بتقع في الناحيتين بأخطاء مالهاش علاقة بالكود.
+    /// نفس فخ «كل كلاس ليه قاعدة باسم لوحده» بس بين عمليتين.</para>
+    /// </summary>
+    private static readonly string Suffix =
+        Environment.GetEnvironmentVariable("CODLEK_TEST_DB_SUFFIX") ?? "";
+
     public string ConnectionString =>
-        "Server=localhost;Database=" + DatabaseName + ";Trusted_Connection=True;" +
+        "Server=localhost;Database=" + DatabaseName + Suffix + ";Trusted_Connection=True;" +
         "TrustServerCertificate=True;MultipleActiveResultSets=True";
 
     protected SqlServerDbFixture()
