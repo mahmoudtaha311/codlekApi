@@ -126,7 +126,7 @@ public class SyncBatchRulesTests
             ControllerContext = new ControllerContext { HttpContext = context },
         };
 
-        var result = Assert.IsType<JsonResult>(await controller.Batch(CancellationToken.None));
+        var result = Assert.IsType<ObjectResult>(await controller.Batch(CancellationToken.None));
 
         Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
 

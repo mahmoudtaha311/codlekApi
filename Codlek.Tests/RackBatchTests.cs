@@ -794,6 +794,13 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
         Assert.Equal("ClientTooOld", body.GetProperty("code").GetString());
         Assert.Equal("1.0.0", body.GetProperty("minVersion").GetString());
 
+        // ⚠️ الراكة بتعرض النص الخام للفني — العربي لازم يوصل مقروء
+        //    مش `ن…`.
+        string raw = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("نسخة البرنامج", raw);
+        Assert.DoesNotContain("\\u0", raw);
+
         using var db = server.CreateDb();
 
         Assert.False(await db.Devices.AnyAsync(d => d.Id == deviceId));

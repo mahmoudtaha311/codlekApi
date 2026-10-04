@@ -79,7 +79,7 @@ public sealed class RackSyncController(
         */
         if (rack.Status == RackStatus.Revoked)
         {
-            return Wire(StatusCodes.Status403Forbidden, new
+            return Readable(StatusCodes.Status403Forbidden, new
             {
                 code = "RackRevoked",
                 message = "الراكة دي اتلغت. اعمل اقتران جديد.",
@@ -95,7 +95,7 @@ public sealed class RackSyncController(
 
         if (!ClientVersions.IsSupported(clientVersion))
         {
-            return Wire(StatusCodes.Status426UpgradeRequired, new
+            return Readable(StatusCodes.Status426UpgradeRequired, new
             {
                 code = "ClientTooOld",
                 minVersion = ClientVersions.Minimum,
@@ -152,11 +152,19 @@ public sealed class RackSyncController(
         return new JsonResult(outcome.Response, RackWire.Wire);
     }
 
-    private static JsonResult Wire(int status, object body) =>
-        new(body, RackWire.Wire) { StatusCode = status };
+    /// <summary>
+    /// رد خطأ <b>بعربي مقروء</b> — مش بـ<see cref="RackWire.Wire"/>.
+    ///
+    /// <para>⚠️ <b>وده فرق مقصود عن القديم.</b> <c>RackWire.Wire</c>
+    /// بيهرّب كل حرف عربي لرمز من ست خانات — ومش مشكلة في رد الدفعة
+    /// لأن الراكة بتفكّه. بس رد الـ<c>426</c> الراكة بتعرض <b>نصّه
+    /// الخام</b> للفني (أول ٢٠٠ حرف)، فالتهريب كان بيوصّله رموز مش
+    /// كلام. المنسّق العادي للموقع بيكتب العربي زي ما هو.</para>
+    /// </summary>
+    private ObjectResult Readable(int status, object body) => StatusCode(status, body);
 
-    private static JsonResult TooLarge() =>
-        Wire(StatusCodes.Status413PayloadTooLarge, new
+    private ObjectResult TooLarge() =>
+        Readable(StatusCodes.Status413PayloadTooLarge, new
         {
             error = "الحمولة أكبر من المسموح. قسّم الرفع على دفعات أصغر.",
             maxBytes = SyncLimits.MaxBodyBytes,
