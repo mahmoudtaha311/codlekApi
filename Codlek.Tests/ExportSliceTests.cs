@@ -460,6 +460,11 @@ public class ExportSliceTests
             Guid t, string installationId, Guid except, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Rack>>([]);
 
+
+        public Task TouchAsync(
+            Guid rackId, int reportsReceived, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
         public Task<string?> TenantNameAsync(Guid t, CancellationToken ct = default) =>
             Task.FromResult<string?>(null);
 

@@ -151,6 +151,19 @@ public sealed class RackRepository(AppDbContext db) : IRackRepository
             .Select(t => t.Name)
             .FirstOrDefaultAsync(ct);
 
+    /// <inheritdoc/>
+    public async Task TouchAsync(
+        Guid rackId, int reportsReceived, CancellationToken ct = default) =>
+        await db.Racks
+            .Where(r => r.Id == rackId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.LastSeenAtUtc, DateTime.UtcNow)
+
+                // 🔴 زيادة على القيمة اللي في القاعدة — مش على
+                //    اللي إحنا قريناها.
+                .SetProperty(r => r.ReportsReceived, r => r.ReportsReceived + reportsReceived),
+                ct);
+
     public void AddCode(RackPairingCode code) => db.RackPairingCodes.Add(code);
 
     public void RemoveCode(RackPairingCode code) => db.RackPairingCodes.Remove(code);

@@ -129,6 +129,11 @@ public class RackRegisterTests
                               && r.Status != RackStatus.Revoked)
                     .ToList());
 
+
+        public Task TouchAsync(
+            Guid rackId, int reportsReceived, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
         public Task<string?> TenantNameAsync(Guid t, CancellationToken ct = default) =>
             Task.FromResult(Tenants.GetValueOrDefault(t));
 

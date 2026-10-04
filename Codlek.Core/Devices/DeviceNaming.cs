@@ -53,4 +53,59 @@ public static class DeviceNaming
         string.IsNullOrWhiteSpace(commercialModelName)
             ? rawModel ?? ""
             : commercialModelName.Trim();
+
+    /// <summary>
+    /// الكلمة دي كود مصنّع زي <c>103C_5336AN</c>؟
+    ///
+    /// <para>🔴 <b>وده حارس <u>كتابة</u> مش قاعدة عرض — والفرق
+    /// مقصود.</b> العرض على <c>/api/v1</c> بيطلّع الاسم زي ما هو
+    /// متخزّن (شوف التعليق على الكلاس). أما الدالة دي بتتستعمل وقت
+    /// <b>الاستقبال</b>: المُرطِّب مابيكتبش اسم تجاري بيبدأ بكود مصنّع
+    /// على الجهاز خالص.</para>
+    ///
+    /// <para>🔴 <b>والسبب إن المصدر الموثوق مش كفاية.</b>
+    /// <c>SystemFamily</c> مصدر موثوق فعلاً، بس على HP بيرجّع
+    /// <c>103C_5336AN HP EliteBook</c> — كود مصنّع مش اسم. <b>١٢
+    /// جهاز في الإنتاج</b> اتخزّنوا كده.</para>
+    ///
+    /// <para>⚠️ <b>والشرطة السفلية شرط.</b> من غيرها الفحص بياخد
+    /// كلمات شرعية زي <c>G8</c> و<c>15ARH05</c> و<c>X1</c> — ودي
+    /// أجزاء حقيقية من أسامي لابات، ورفضها بيخرّب أسامي صح.</para>
+    /// </summary>
+    public static bool IsOemCodeToken(string? word)
+    {
+        string text = (word ?? "").Trim();
+
+        if (text.Length < 5 || text.Length > 24) return false;
+
+        int underscore = text.IndexOf('_');
+
+        if (underscore < 2 || underscore > text.Length - 3) return false;
+
+        if (!text.All(c => char.IsLetterOrDigit(c) || c == '_')) return false;
+
+        return text.Any(char.IsDigit);
+    }
+
+    /// <summary>
+    /// الاسم ده أصله كود مصنّع؟ — <b>حارس الكتابة</b>.
+    ///
+    /// <para>⚠️ <b>من أول كلمة بس.</b> كود في نص الاسم ممكن
+    /// يكون جزء حقيقي من الموديل.</para>
+    ///
+    /// <para>🔴 <b>والاسم مختلف عن <c>StartsWithOemCode</c>
+    /// اللي في القديم عن قصد — لأن السلوك مختلف.</b> اللي في القديم
+    /// بيشترط مسافة (<c>space &gt; 0</c>)، فكلمة واحدة بالكامل كود
+    /// بتعدّي منه. والحارس هنا بيرفضها، عشان يطابق
+    /// <c>IsUsableName</c> في مُرطِّب الاسم التجاري — وهو اللي
+    /// بيحدّد إيه اللي <b>يتكتب</b>.</para>
+    /// </summary>
+    public static bool IsOemCodeName(string? name)
+    {
+        string text = (name ?? "").Trim();
+
+        int space = text.IndexOf(' ');
+
+        return space < 0 ? IsOemCodeToken(text) : IsOemCodeToken(text[..space]);
+    }
 }

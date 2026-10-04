@@ -76,6 +76,7 @@ public class RackWireContractTests : IClassFixture<RackWireContractTests.Server>
         { "GET", "/api/v2/technicians/repair" },
         { "GET", "/api/v2/containers" },
         { "GET", "/api/v2/repairs/assigned" },
+        { "POST", "/api/sync/reports" },
     };
 
     // =================================================================

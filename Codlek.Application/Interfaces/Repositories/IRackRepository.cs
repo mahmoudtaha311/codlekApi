@@ -141,6 +141,21 @@ public interface IRackRepository
         CancellationToken ct = default);
 
     /// <summary>اسم الشركة — للرد على التسجيل.</summary>
+    /// <summary>
+    /// «المحطة دي رفعت شغل» — <b>آخر ظهور + عدّاد الفحوص</b>.
+    ///
+    /// <para>🔴 <b>وزيادة العدّاد في جملة واحدة مش
+    /// قراية-ثم-كتابة.</b> الراكة بتعيد إرسال نفس الدفعة لو الرد ضاع
+    /// في الشبكة، فطلبين متوازيين على نفس الصف بياكلوا زيادة من
+    /// بعض — والعدّاد بيتعرض للمالك في قايمة المحطات.</para>
+    ///
+    /// <para>⚠️ <b>و<c>LastSeenAtUtc</c> هو اللي بيخلّي المالك
+    /// يعرف إن البنش ده لسه حيّ.</b> من غيره، محطة بايتة من أسبوع
+    /// شكلها زي اللي رفعت منّ دقيقة.</para>
+    /// </summary>
+    Task TouchAsync(
+        Guid rackId, int reportsReceived, CancellationToken ct = default);
+
     Task<string?> TenantNameAsync(Guid tenantId, CancellationToken ct = default);
 
     void AddCode(RackPairingCode code);
