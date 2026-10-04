@@ -81,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
+        services.AddScoped<IReportRepository, ReportRepository>();
         services.AddScoped<IDeviceReference, DeviceReference>();
         services.AddScoped<ITenantCounters, TenantCounters>();
         services.AddScoped<IDeviceWorkflowRecorder, DeviceWorkflowRecorder>();
