@@ -150,6 +150,13 @@ public sealed class FakeWorkflowRecorder : IDeviceWorkflowRecorder
     public bool Refuse;
 
     /// <summary>
+    /// ⚠️ <b>نص الرفض</b> — مسار المزامنة بيفرّق بين «الجهاز مش موجود»
+    /// (رفض مؤقت) وأي سبب تاني (نهائي) <b>بالنص</b>، فالفحص محتاج
+    /// يتحكّم فيه.
+    /// </summary>
+    public string RefuseWith = "مرفوض";
+
+    /// <summary>
     /// ⚠️ <b>بترفض الحركة رقم كده وبس</b> — عشان نقيس «الكل أو ولا
     /// واحد»: الدفعة لازم ترجّع صفر، واللي نجح قبلها يفضل في
     /// الذاكرة ومحدش يحفظه.
@@ -182,7 +189,7 @@ public sealed class FakeWorkflowRecorder : IDeviceWorkflowRecorder
         Moves.Add(move);
 
         return Task.FromResult(Refuse
-            ? MoveResult.Fail("مرفوض")
+            ? MoveResult.Fail(RefuseWith)
             : MoveResult.Recorded(new DeviceWorkflowEvent
             {
                 TenantId = tenantId,

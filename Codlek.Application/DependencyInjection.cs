@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<Interfaces.IRepairTransitions, Features.Repairs.RepairTransitions>();
 
         services.AddScoped<Features.Rack.SyncDevices.DeviceSyncApplier>();
+        services.AddScoped<Features.Rack.SyncOperational.OperationalSyncApplier>();
 
         return services;
     }
