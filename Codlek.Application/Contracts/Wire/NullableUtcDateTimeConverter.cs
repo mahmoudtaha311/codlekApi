@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Codlek.Api.Racks;
+namespace Codlek.Application.Contracts.Wire;
 
 /// <summary>
 /// نفس قاعدة <see cref="UtcDateTimeConverter"/> للتواريخ اللي ممكن

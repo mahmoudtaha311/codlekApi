@@ -1,6 +1,8 @@
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Enums;
 using Codlek.Core.Entities;
+using Codlek.Core.Sync;
+using Codlek.Core.Text;
 using Codlek.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -153,7 +155,15 @@ public sealed class RackRepository(AppDbContext db) : IRackRepository
 
     /// <inheritdoc/>
     public async Task TouchAsync(
-        Guid rackId, int reportsReceived, CancellationToken ct = default) =>
+        Guid rackId, int reportsReceived, string? appVersion = null,
+        CancellationToken ct = default)
+    {
+        // ⚠️ الفاضي = «مش معروف» مش «امسح». والقص على طول العمود —
+        //    ترويسة أطول كانت هترمي على الحفظ بعد ما الشغل اتسجّل.
+        string? version = string.IsNullOrWhiteSpace(appVersion)
+            ? null
+            : TextClip.To(appVersion.Trim(), ClientVersions.StoredMaxLength);
+
         await db.Racks
             .Where(r => r.Id == rackId)
             .ExecuteUpdateAsync(s => s
@@ -161,8 +171,11 @@ public sealed class RackRepository(AppDbContext db) : IRackRepository
 
                 // 🔴 زيادة على القيمة اللي في القاعدة — مش على
                 //    اللي إحنا قريناها.
-                .SetProperty(r => r.ReportsReceived, r => r.ReportsReceived + reportsReceived),
+                .SetProperty(r => r.ReportsReceived, r => r.ReportsReceived + reportsReceived)
+
+                .SetProperty(r => r.AppVersion, r => version ?? r.AppVersion),
                 ct);
+    }
 
     public void AddCode(RackPairingCode code) => db.RackPairingCodes.Add(code);
 

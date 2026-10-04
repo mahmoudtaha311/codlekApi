@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Codlek.Api.Racks;
+namespace Codlek.Application.Contracts.Wire;
 
 /// <summary>
 /// تسلسل عقود سلك الراكة — <b>تعريف واحد، مجمّد</b>.

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Codlek.Api.Racks;
+using Codlek.Application.Contracts.Wire;
 
 namespace Codlek.Tests;
 

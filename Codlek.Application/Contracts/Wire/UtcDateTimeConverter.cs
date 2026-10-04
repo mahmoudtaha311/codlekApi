@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Codlek.Api.Racks;
+namespace Codlek.Application.Contracts.Wire;
 
 /// <summary>
 /// بيكتب كل تاريخ على السلك كـUTC صريح — <b>بحرف <c>Z</c> في

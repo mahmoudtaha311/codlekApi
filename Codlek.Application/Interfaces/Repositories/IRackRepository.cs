@@ -153,8 +153,13 @@ public interface IRackRepository
     /// يعرف إن البنش ده لسه حيّ.</b> من غيره، محطة بايتة من أسبوع
     /// شكلها زي اللي رفعت منّ دقيقة.</para>
     /// </summary>
+    /// <param name="appVersion">
+    /// ⚠️ نسخة برنامج الراكة لو معروفة — <b>الفاضي مابيمسحش</b> النسخة
+    /// المتسجّلة. مسار الدفعات بس اللي بيبعتها.
+    /// </param>
     Task TouchAsync(
-        Guid rackId, int reportsReceived, CancellationToken ct = default);
+        Guid rackId, int reportsReceived, string? appVersion = null,
+            CancellationToken ct = default);
 
     Task<string?> TenantNameAsync(Guid tenantId, CancellationToken ct = default);
 

@@ -131,7 +131,8 @@ public class RackRegisterTests
 
 
         public Task TouchAsync(
-            Guid rackId, int reportsReceived, CancellationToken ct = default) =>
+            Guid rackId, int reportsReceived, string? appVersion = null,
+            CancellationToken ct = default) =>
             Task.CompletedTask;
 
         public Task<string?> TenantNameAsync(Guid t, CancellationToken ct = default) =>

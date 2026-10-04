@@ -1,5 +1,6 @@
 using Codlek.Api.Racks;
 using Codlek.Application.Contracts.Rack;
+using Codlek.Application.Contracts.Wire;
 using Codlek.Application.Features.Rack.Feeds;
 using Codlek.Core.Enums;
 using MediatR;

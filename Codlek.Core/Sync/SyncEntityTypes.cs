@@ -21,6 +21,22 @@ public static class SyncEntityTypes
     public const string DeviceWorkflowEvent = "workflow";
 
     /// <summary>
+    /// كل اسم الكود ده بيعرف يقرأه — <b>حتى لو النسخة دي مش
+    /// مفعّلاه</b>.
+    ///
+    /// <para>🔴 <b>والفرق بينه وبين <see cref="Supported"/> بيوصل
+    /// للفني.</b> اسم مش هنا خالص = حمولة غلط
+    /// (<c>UnknownEntityType</c>). اسم هنا ومش مدعوم = <b>السيرفر
+    /// ده</b> أقدم من العملية (<c>UnsupportedEntity</c>) — والراكة
+    /// بتحفظ الصف «مستنّي تحديث الخادم» بدل «بياناتك غلط».</para>
+    /// </summary>
+    public static readonly IReadOnlySet<string> Known =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Device, Report, RepairWorkItem, DeviceWorkflowEvent,
+        };
+
+    /// <summary>
     /// اللي النسخة دي بتقبله فعلاً.
     ///
     /// <para>⚠️ المقارنة بتتجاهل حالة الأحرف — الراكات القديمة
@@ -30,6 +46,27 @@ public static class SyncEntityTypes
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             Device, Report, RepairWorkItem, DeviceWorkflowEvent,
+        };
+
+    /// <summary>
+    /// ترتيب التطبيق جوّه الدفعة الواحدة.
+    ///
+    /// <para>🔴 <b>الجهاز الأول دايماً</b> — كل حاجة تانية بتشاور
+    /// عليه. بعده الفحص، بعده أمر الصيانة (ممكن يشاور على فحص مصدر)،
+    /// وبعده الحركات (ممكن تشاور على أمر).</para>
+    ///
+    /// <para>⚠️ <b>والترتيب ده حزام تاني مش شرط صحّة.</b> الراكة
+    /// بترتّب طابورها كمان، والحركة اللي وصلت قبل أمرها بتتقبل
+    /// والرابط بيتحل بعدين.</para>
+    /// </summary>
+    public static int ApplyOrder(string? entityType) =>
+        (entityType ?? "").ToLowerInvariant() switch
+        {
+            Device => 0,
+            Report => 1,
+            RepairWorkItem => 2,
+            DeviceWorkflowEvent => 3,
+            _ => 99,
         };
 
     /// <summary>

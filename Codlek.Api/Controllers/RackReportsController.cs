@@ -82,7 +82,7 @@ public sealed class RackReportsController(
           شغل فعلي.
         */
         await racks.TouchAsync(
-            rack.Id, ingested.Added + ingested.Updated, ct);
+            rack.Id, ingested.Added + ingested.Updated, ct: ct);
 
         return Ok(ingested);
     }

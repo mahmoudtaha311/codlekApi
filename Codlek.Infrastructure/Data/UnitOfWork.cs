@@ -1,4 +1,5 @@
 using Codlek.Application.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Codlek.Infrastructure.Data;
 
@@ -6,6 +7,21 @@ public sealed class UnitOfWork(AppDbContext db) : IUnitOfWork
 {
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         db.SaveChangesAsync(ct);
+
+    /// <inheritdoc/>
+    public async Task<bool> TrySaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            return false;
+        }
+    }
 
     /// <summary>
     /// 🔴 <b>المعاملة بتعدّي على استراتيجية الإعادة، مش

@@ -141,6 +141,12 @@ public class BrandSliceTests
 
     private sealed class FakeUnitOfWork : IUnitOfWork
     {
+        public async Task<bool> TrySaveChangesAsync(CancellationToken ct = default)
+        {
+            await SaveChangesAsync(ct);
+            return true;
+        }
+
         public int Saves;
 
         public Task<int> SaveChangesAsync(CancellationToken ct = default)

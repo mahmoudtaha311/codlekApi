@@ -92,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IReportIngestRepository, ReportIngestRepository>();
         services.AddScoped<IDeviceSyncRepository, DeviceSyncRepository>();
         services.AddScoped<IOperationalSyncRepository, OperationalSyncRepository>();
+        services.AddScoped<ISyncBatchRepository, SyncBatchRepository>();
         services.AddScoped<IActivationCodeHasher, ActivationCodeHasher>();
         services.AddScoped<IRackKeys, RackKeys>();
         services.AddScoped<IRackAuthenticator, RackAuthenticator>();

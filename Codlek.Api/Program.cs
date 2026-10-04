@@ -2,6 +2,7 @@ using Codlek.Api.Middlewares;
 using Codlek.Api.Racks;
 using Codlek.Api;
 using Codlek.Application;
+using Codlek.Application.Contracts.Wire;
 using Codlek.Infrastructure.Auth;
 using Codlek.Infrastructure;
 
