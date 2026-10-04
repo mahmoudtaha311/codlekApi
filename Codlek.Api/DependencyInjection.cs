@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
+using Codlek.Api.Racks;
+
 namespace Codlek.Api;
 
 /// <summary>تسجيل طبقة الواجهة — التحقق من التوكن وشكل الأخطاء.</summary>
@@ -28,6 +30,10 @@ public static class DependencyInjection
           راكة لأن مفيش مطالبة شركة.
         */
         services.AddScoped<Racks.RackKeyFilter>();
+
+        // 🔴 حدود الطلبات على سطح الراكة — ومعاها جسم ٤٢٩ مكتوب
+        //    بالإيد، لأن الراكة بتقرا اللي يوصلها.
+        services.AddRackRateLimiting(configuration);
 
         services.AddJwtAuthentication(configuration);
         services.AddValidationProblemShape();

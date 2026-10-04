@@ -89,6 +89,12 @@ public class UserSliceTests
         public void Record(
             string action, string entityType, Guid? entityId,
             string entityCode, string summary) => Entries.Add((action, summary));
+
+        /// <summary>⚠️ مسار الراكة — القطاع ده مابيستعملهوش.</summary>
+        public void RecordForRack(
+            RackAuditActor actor, string action, string entityType, Guid? entityId,
+            string entityCode, string summary, string dataJson = "") =>
+            Entries.Add((action, summary));
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

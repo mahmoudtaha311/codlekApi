@@ -131,6 +131,12 @@ public class BrandSliceTests
         public void Record(
             string action, string entityType, Guid? entityId,
             string entityCode, string summary) => Actions.Add(action);
+
+        /// <summary>⚠️ مسار الراكة — القطاع ده مابيستعملهوش.</summary>
+        public void RecordForRack(
+            RackAuditActor actor, string action, string entityType, Guid? entityId,
+            string entityCode, string summary, string dataJson = "") =>
+            Actions.Add(action);
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

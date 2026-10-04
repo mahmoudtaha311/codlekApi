@@ -1,5 +1,6 @@
 using Codlek.Application.Contracts.Repairs;
 using Codlek.Application.Contracts.Workflow;
+using Codlek.Application.Abstractions;
 using Codlek.Application.Interfaces;
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Entities;
@@ -200,6 +201,19 @@ public sealed class FakeAuditTrail : IAuditTrail
     public void Record(
         string action, string entityType, Guid? entityId, string entityCode, string summary) =>
         Lines.Add((action, entityType, entityId, entityCode, summary));
+
+    /// <summary>
+    /// ⚠️ <b>سطور الراكة في قايمة لوحدها.</b> الفاعل مختلف (محطة مش
+    /// مستخدم) والشركة جايّة من المحطة — فخلطهم في قايمة واحدة كان
+    /// بيخلّي الفحص مايقدرش يقيس إن الشركة الصح اتكتبت.
+    /// </summary>
+    public readonly List<(RackAuditActor Actor, string Action, string EntityType,
+        Guid? Id, string Code, string Summary, string DataJson)> RackLines = [];
+
+    public void RecordForRack(
+        RackAuditActor actor, string action, string entityType, Guid? entityId,
+        string entityCode, string summary, string dataJson = "") =>
+        RackLines.Add((actor, action, entityType, entityId, entityCode, summary, dataJson));
 }
 
 /// <summary>
