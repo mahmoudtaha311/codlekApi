@@ -33,6 +33,18 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(assembly);
 
+        /*
+          ⚠️ **الانتقالات خدمة مسجّلة، مش ملف ثابت.**
+
+          هي محتاجة مستودع وكاتب حركات ومسجّل — فهي بتتسجّل
+          بـ`Scoped` زي أي حاجة بتلمس القاعدة.
+
+          🔴 ولازم تفضل في طبقة التطبيق مش البنية التحتية: **مسار
+          المزامنة من الراكة** هيناديها، ومن غيرها السبعة انتقالات
+          هيتكرّروا هناك — وفني أوفلاين يقدر يقفل أمر مش من حقه.
+        */
+        services.AddScoped<Interfaces.IRepairTransitions, Features.Repairs.RepairTransitions>();
+
         return services;
     }
 }

@@ -19,6 +19,31 @@ public static class AuditActions
       والخلط بيخلّي السجل يقول «اتعمل حساب فني» والحقيقة إن
       اللي اتعمل حساب لوحة بصلاحيات مدير.
     */
+    // =================================================================
+    //  الصيانة
+    // =================================================================
+    //
+    // 🔴 **الـentityType معاهم هو النص الصغير `"repair"`** — مش
+    // `"Repair"`. ونقطة فلاتر السجل بتبني المنسدلة من
+    // القيم الموجودة فعلاً، فأي فرق في حالة الحروف بيطلّع
+    // سطرين لنفس الحاجة.
+    //
+    // ⚠️ وقطاع الأقسام بيكتب `"Department"` بحرف كبير —
+    // المشروعين عندهم اصطلاحين مختلفين، والسجل المشترك
+    // بيخلّي الفرق باين.
+
+    public const string RepairCreated = "repair.created";
+    public const string RepairAssigned = "repair.assigned";
+    public const string RepairReassigned = "repair.reassigned";
+    public const string RepairApproved = "repair.approved";
+    public const string RepairRejected = "repair.rejected";
+    public const string RepairStarted = "repair.started";
+    public const string RepairCompleted = "repair.completed";
+    public const string RepairUnableToRepair = "repair.unable_to_repair";
+    public const string RepairCancelled = "repair.cancelled";
+    public const string RepairRetestStarted = "repair.retest_started";
+    public const string DeviceSentToRepair = "device.sent_to_repair";
+
     public const string WebUserCreated = "webuser.created";
     public const string WebUserSuspended = "webuser.suspended";
     public const string WebUserActivated = "webuser.activated";

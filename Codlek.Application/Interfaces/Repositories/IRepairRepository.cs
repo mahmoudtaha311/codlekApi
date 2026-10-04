@@ -106,4 +106,74 @@ public interface IRepairRepository
     /// </summary>
     Task<IReadOnlyList<RepairWorkItem>> PendingAsync(
         Guid tenantId, CancellationToken ct = default);
+
+    // =================================================================
+    //  القرايات — القايمة والتفاصيل
+    // =================================================================
+
+    /// <summary>
+    /// القايمة المصفّحة + العدد الكلي <b>قبل</b> التصفيح.
+    ///
+    /// <para>🔴 <b>الترتيب لازم يبقى فيه فاصل تعادل ثابت</b>
+    /// (<c>ThenBy(Id)</c>): <c>OpenedAtUtc</c> مش فريد — دفعة أوامر
+    /// اتفتحت من نفس الفحص بتاخد نفس المللي ثانية، ومن غير الفاصل
+    /// الصف بيتكرر في صفحتين أو بيختفي بين <c>Skip</c>
+    /// و<c>Take</c>.</para>
+    /// </summary>
+    Task<(IReadOnlyList<RepairListRow> Rows, int TotalItems)> ListAsync(
+        Guid tenantId, RepairListFilter filter, CancellationToken ct = default);
+
+    /// <summary>
+    /// كام أمر واقف على المحاسب — <b>في الشركة كلها</b>.
+    ///
+    /// <para>🔴 <b>برّه الفلاتر وبرّه التصفيح عن قصد.</b> لو اتحسب
+    /// من الصفوف المعروضة، «فيه ٣ مستنيين» بتختفي لو التلاتة في
+    /// صفحة ٣ — والمدير على صفحة ١ بيفتكر إن مفيش حاجة واقفة.</para>
+    /// </summary>
+    Task<int> CountAwaitingApprovalAsync(
+        Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// كل أوامر جهاز واحد — <b>من غير تصفيح ومن غير فلاتر</b>،
+    /// الأحدث فتحاً الأول.
+    /// </summary>
+    Task<IReadOnlyList<RepairListRow>> ListForDeviceAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// الأمر للعرض — <c>AsNoTracking</c> ومعاه الأعطال والقطع.
+    /// </summary>
+    Task<RepairWorkItem?> FindDetailAsync(
+        Guid tenantId, Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// حركات السجل التشغيلي المرتبطة بالأمر، بترتيب الحدوث.
+    /// </summary>
+    Task<IReadOnlyList<RepairWorkflowFacts>> ListWorkflowAsync(
+        Guid tenantId, Guid workItemId, CancellationToken ct = default);
+
+    /// <summary>
+    /// أسماء فنيي الشركة كقاموس — <b>قراية واحدة بدل N+1</b> على
+    /// شاشة التفاصيل.
+    ///
+    /// <para>⚠️ الفني المحذوف أو المجهول مش في القاموس، والشاشة
+    /// بتعرض اسم فاضي عشان تفضل تفتح.</para>
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> TechnicianNamesAsync(
+        Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// الجهاز موجود في الشركة دي؟ — لتبويب الصيانة على صفحة الجهاز.
+    ///
+    /// <para>⚠️ الترشيح بالشركة هو اللي بيخلّي جهاز شركة تانية
+    /// <c>404</c> مش <c>403</c>.</para>
+    /// </summary>
+    Task<bool> DeviceExistsAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// بيانات عرض اللاب — <c>null</c> لو مش موجود.
+    /// </summary>
+    Task<RepairDeviceFacts?> DeviceFactsAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
 }

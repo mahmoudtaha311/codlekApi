@@ -44,14 +44,14 @@ public static class RepairErrors
         new("repair.closed_cannot_assign", "الأمر ده مقفول — مينفعش يتسند.", 400);
 
     public static readonly Error ClosedCannotEdit =
-        new("repair.closed_cannot_edit", "الأمر ده مقفول — مينفعش يتعدّل.", 400);
+        new("repair.closed_cannot_update", "الأمر ده مقفول — مينفعش يتعدّل.", 400);
 
     /// <summary>
     /// ⚠️ الرسالة بتقول الحالة بالاسم — «مينفعش تبدأ أمر حالته
     /// «ملغاة»» بتفهّم المستخدم، و«مينفعش» لوحدها لأ.
     /// </summary>
     public static Error CannotStartFrom(RepairStatus status) =>
-        new("repair.cannot_start",
+        new("repair.cannot_start_from_status",
             $"مينفعش تبدأ أمر حالته «{RepairStatusRules.Text(status)}».", 400);
 
     // =================================================================
@@ -91,11 +91,11 @@ public static class RepairErrors
     /// قرارين مكتوبين بدل واحد بيخبّي التاني.</para>
     /// </summary>
     public static readonly Error NotApprovedYet =
-        new("repair.not_approved",
+        new("repair.approval_pending",
             "الأمر ده لسه مستني موافقة المحاسب — وافق عليه الأول.", 400);
 
     public static readonly Error AlreadyRejected =
-        new("repair.rejected", "الأمر ده اترفض — مينفعش يبدأ.", 400);
+        new("repair.approval_rejected", "الأمر ده اترفض — مينفعش يبدأ.", 400);
 
     /// <summary>
     /// 🔴 <b>محاسبين على شاشتين بيدوسوا في نفس اللحظة.</b>
@@ -114,7 +114,7 @@ public static class RepairErrors
     /// الطلب تاني.</para>
     /// </summary>
     public static readonly Error RejectionReasonRequired =
-        new("repair.rejection_reason_required",
+        new("repair.reject_note_required",
             "اكتب سبب الرفض — الفني هيشوفه.", 400);
 
     // =================================================================
@@ -122,11 +122,62 @@ public static class RepairErrors
     // =================================================================
 
     public static readonly Error WorkDescriptionRequired =
-        new("repair.work_description_required", "اكتب اللي اتعمل في الصيانة.", 400);
+        new("repair.actions_required", "اكتب اللي اتعمل في الصيانة.", 400);
 
     public static readonly Error UnableReasonRequired =
         new("repair.unable_reason_required", "اكتب سبب تعذّر الإصلاح.", 400);
 
     public static readonly Error CancelReasonRequired =
         new("repair.cancel_reason_required", "اكتب سبب الإلغاء.", 400);
+
+    // =================================================================
+    //  اللي اتزاد مع المعالجات
+    // =================================================================
+
+    public static Error CannotCancelFrom(RepairStatus status) =>
+        new("repair.cannot_cancel_from_status",
+            $"مينفعش تلغي أمر حالته «{RepairStatusRules.Text(status)}».", 400);
+
+    public static Error CannotCloseFrom(RepairStatus status) =>
+        new("repair.cannot_close_from_status",
+            $"مينفعش تقفل أمر حالته «{RepairStatusRules.Text(status)}».", 400);
+
+    /// <summary>
+    /// 🔴 <b>التجاوز الإداري محتاج سبب مكتوب.</b>
+    ///
+    /// <para>هو بيبدأ أمر نيابةً عن فني وبيسجّل وقت <b>دوسة
+    /// المدير</b> كوقت بداية الشغل. ومن غير سبب، السجل بيقول
+    /// «تجاوز إداري» ومابيقولش ليه.</para>
+    /// </summary>
+    public static readonly Error OverrideReasonRequired =
+        new("repair.override_reason_required", "التجاوز الإداري محتاج سبب مكتوب.", 400);
+
+    /// <summary>
+    /// ⚠️ <b>التجاوز للمالك بس.</b>
+    ///
+    /// <para>والسياسة على النقطة <c>ManagerOrAbove</c> — فالمدير
+    /// بيعدّي الحاجز وبياخد <c>403</c> من هنا. وده منقول زي ما
+    /// هو عن قصد: تضييقه لـ<c>OwnerOnly</c> بيغيّر أنهي طبقة بترد
+    /// وبالتالي شكل الرد.</para>
+    /// </summary>
+    public static readonly Error OverrideOwnerOnly =
+        new("repair.override_owner_only", "التجاوز الإداري للمدير العام بس.", 403);
+
+    /// <summary>
+    /// 🔴 <b>التخصّص مش من القايمة — وده فرق مقصود عن
+    /// القديم.</b>
+    ///
+    /// <para>القديم بيعمل <c>(TechnicianSpecialty)body.RequiredSpecialty</c>
+    /// من غير أي فحص، فـ<c>99</c> بيتخزن والأمر بيفضل
+    /// بـ«غير محدد» <b>للأبد</b>. نفس الحاجة اللي اتصلّحت في
+    /// حسابات اللوحة.</para>
+    /// </summary>
+    public static readonly Error SpecialtyInvalid =
+        new("repair.specialty_invalid", "التخصّص المطلوب مش من القايمة.", 400);
+
+    /// <summary>
+    /// ⚠️ <b>سبب الإلغاء أطول من العمود.</b>
+    /// </summary>
+    public static readonly Error CancelReasonTooLong =
+        new("repair.cancel_reason_too_long", "سبب الإلغاء أطول من اللازم.", 400);
 }

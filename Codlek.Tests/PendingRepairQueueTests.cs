@@ -86,6 +86,31 @@ public class PendingRepairQueueTests
 
         public Task<string> DeviceManufacturerAsync(
             Guid t, Guid d, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<(IReadOnlyList<RepairListRow> Rows, int TotalItems)> ListAsync(
+            Guid t, RepairListFilter f, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<int> CountAwaitingApprovalAsync(Guid t, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<RepairListRow>> ListForDeviceAsync(
+            Guid t, Guid d, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<RepairWorkItem?> FindDetailAsync(
+            Guid t, Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<RepairWorkflowFacts>> ListWorkflowAsync(
+            Guid t, Guid w, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, string>> TechnicianNamesAsync(
+            Guid t, CancellationToken ct = default) => throw new NotSupportedException();
+
+        public Task<bool> DeviceExistsAsync(Guid t, Guid d, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<RepairDeviceFacts?> DeviceFactsAsync(
+            Guid t, Guid d, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private static (FakeRepository Repo,
