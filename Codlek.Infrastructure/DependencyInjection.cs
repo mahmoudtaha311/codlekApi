@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<IRepairRepository, RepairRepository>();
         services.AddScoped<IHardwareRepository, HardwareRepository>();
+        services.AddScoped<IHandoverRepository, HandoverRepository>();
         services.AddScoped<IDeviceReference, DeviceReference>();
         services.AddScoped<ITenantCounters, TenantCounters>();
         services.AddScoped<IDeviceWorkflowRecorder, DeviceWorkflowRecorder>();

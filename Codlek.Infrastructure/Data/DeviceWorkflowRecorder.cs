@@ -156,4 +156,36 @@ public sealed class DeviceWorkflowRecorder(
 
         return MoveResult.Recorded(row);
     }
+
+    /// <summary>
+    /// 🔴 <b>الكل أو ولا واحد — وده كان مبني ومتجرّب ومحدش
+    /// بيناديه.</b>
+    ///
+    /// <para>في المشروع القديم كان ليه <b>نداء واحد في المشروع
+    /// كله، في ملف اختبارات</b>. نقطة التسليم هي الكونتاكت الناقص
+    /// اللي كان ناقصه.</para>
+    ///
+    /// <para>⚠️ وأول فشل بيرجّع <b>صفر</b> مش عدد اللي نجح: اللي نجح
+    /// لسه في الذاكرة ومحدش حفظه، فالرقم ده بيوصف الحقيقة بعد ما
+    /// المنادي يسيب الحفظ.</para>
+    /// </summary>
+    public async Task<BatchMoveResult> RecordManyAsync(
+        Guid tenantId, IReadOnlyList<Guid> deviceIds,
+        Func<Guid, WorkflowMove> build, CancellationToken ct = default)
+    {
+        var wanted = deviceIds.Distinct().ToList();
+
+        // ⚠️ الدفعة الفاضية غلط مش نجاح ساكت — المنادي بيفحص العدد
+        // قبل كده، والسطر ده حاجز أخير.
+        if (wanted.Count == 0) return BatchMoveResult.Fail("مفيش أجهزة متحدّدة.");
+
+        foreach (var id in wanted)
+        {
+            var result = await RecordAsync(tenantId, build(id), ct);
+
+            if (!result.Ok) return BatchMoveResult.Fail(result.Error!);
+        }
+
+        return BatchMoveResult.Recorded(wanted.Count);
+    }
 }

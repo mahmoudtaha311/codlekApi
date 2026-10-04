@@ -56,4 +56,17 @@ public static class AuditActions
 
     public const string DepartmentCreated = "department.created";
     public const string DepartmentUpdated = "department.updated";
+
+    // =================================================================
+    //  التسليم
+    // =================================================================
+
+    /// <summary>
+    /// ⚠️ <c>"Device"</c> بحرف كبير هو نوع الكيان هنا — زي
+    /// <c>"Department"</c> ومش زي <c>"repair"</c>. الفرق موجود في
+    /// بيانات الإنتاج واتنقل زي ما هو.
+    /// </summary>
+    public const string DevicesMarkedReady = "device.marked_ready";
+
+    public const string DevicesHandedOver = "device.handed_over";
 }

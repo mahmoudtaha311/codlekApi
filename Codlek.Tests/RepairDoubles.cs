@@ -137,6 +137,33 @@ public sealed class FakeWorkflowRecorder : IDeviceWorkflowRecorder
     public readonly List<WorkflowMove> Moves = [];
     public bool Refuse;
 
+    /// <summary>
+    /// ⚠️ <b>بترفض الحركة رقم كده وبس</b> — عشان نقيس «الكل أو ولا
+    /// واحد»: الدفعة لازم ترجّع صفر، واللي نجح قبلها يفضل في
+    /// الذاكرة ومحدش يحفظه.
+    /// </summary>
+    public int? RefuseAt;
+
+    public async Task<BatchMoveResult> RecordManyAsync(
+        Guid tenantId, IReadOnlyList<Guid> deviceIds,
+        Func<Guid, WorkflowMove> build, CancellationToken ct = default)
+    {
+        var wanted = deviceIds.Distinct().ToList();
+
+        if (wanted.Count == 0) return BatchMoveResult.Fail("مفيش أجهزة متحدّدة.");
+
+        for (int i = 0; i < wanted.Count; i++)
+        {
+            if (RefuseAt == i) return BatchMoveResult.Fail("الحركة دي مرفوضة");
+
+            var result = await RecordAsync(tenantId, build(wanted[i]), ct);
+
+            if (!result.Ok) return BatchMoveResult.Fail(result.Error!);
+        }
+
+        return BatchMoveResult.Recorded(wanted.Count);
+    }
+
     public Task<MoveResult> RecordAsync(
         Guid tenantId, WorkflowMove move, CancellationToken ct = default)
     {
