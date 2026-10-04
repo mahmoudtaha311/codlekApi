@@ -56,6 +56,7 @@ public static class DependencyInjection
           إنه يشتغل بنص الترجمة.
         */
         services.AddScoped<Features.Rack.IngestReports.DeviceReferenceResolver>();
+        services.AddScoped<Features.Rack.SyncDevices.DeviceSyncApplier>();
 
         return services;
     }

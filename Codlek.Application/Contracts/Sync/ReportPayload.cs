@@ -411,3 +411,63 @@ public sealed class IngestResult
         $"وصل {Total} فحص: {Added} جديد، {Updated} اتحدّث، {Unchanged} زي ما هو"
         + (Rejected > 0 ? $"، {Rejected} مرفوض" : "");
 }
+
+/// <summary>
+/// جهاز جايّ من الراكة.
+///
+/// <para>🔴 <b>والراكة هي اللي بتولّد <c>Id</c></b> عشان تشتغل
+/// أوفلاين، فالسيرفر بيعمل <c>upsert</c> بالمعرّف ده مش بيولّد واحد
+/// جديد. لو عمل، <b>كل راكة كانت هتخلّق نسخة تانية من نفس
+/// اللاب</b>.</para>
+/// </summary>
+public sealed class DeviceSyncPayload
+{
+    public Guid Id { get; set; }
+
+    public string PublicCode { get; set; } = "";
+    public int CodeState { get; set; }
+
+    public int Confidence { get; set; }
+    public string IdentityBasis { get; set; } = "";
+    public int Status { get; set; }
+
+    public DateTime FirstSeenAtUtc { get; set; }
+    public DateTime LastSeenAtUtc { get; set; }
+
+    public string FirstSeenByTechnicianCode { get; set; } = "";
+
+    public string LastKnownManufacturer { get; set; } = "";
+    public string LastKnownModel { get; set; } = "";
+
+    /// <summary>
+    /// رمز حاوية الاستيراد زي ما الفني كتبه أو اختاره.
+    ///
+    /// <para>🔴 <b>والاسم ده لازم يطابق اللي على الراكة
+    /// بالحرف.</b> الحقل اللي اسمه غلط <b>بيتجاهل في صمت</b> — ودي
+    /// عضّت المشروع قبل كده مع <c>DeviceId</c> على الفحص.</para>
+    ///
+    /// <para>⚠️ وفاضي شرعي: الراكات القديمة مش عارفة الحقل ده أصلاً،
+    /// والفاضي معناه «ماتلمسش الحاوية» مش «امسحها».</para>
+    /// </summary>
+    public string ContainerCode { get; set; } = "";
+
+    public List<DeviceIdentifierPayload> Identifiers { get; set; } = [];
+}
+
+/// <summary>مرساة هوية — <b>تاريخ مش عمود</b>.</summary>
+public sealed class DeviceIdentifierPayload
+{
+    public int Kind { get; set; }
+    public string RawValue { get; set; } = "";
+    public string NormalizedValue { get; set; } = "";
+    public string Source { get; set; } = "";
+    public int Confidence { get; set; }
+
+    public DateTime FirstSeenAtUtc { get; set; }
+    public DateTime LastSeenAtUtc { get; set; }
+
+    public bool IsActive { get; set; } = true;
+    public string SupersededReason { get; set; } = "";
+    public string SupersededByName { get; set; } = "";
+    public DateTime? SupersededAtUtc { get; set; }
+}
