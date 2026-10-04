@@ -1,4 +1,5 @@
 using Codlek.Application.Interfaces.Repositories;
+using Codlek.Core.Enums;
 using Codlek.Core.Entities;
 using Codlek.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,23 @@ public sealed class RackRepository(AppDbContext db) : IRackRepository
         Guid tenantId, Guid rackId, CancellationToken ct = default) =>
         db.Racks.FirstOrDefaultAsync(
             r => r.Id == rackId && r.TenantId == tenantId, ct);
+
+    /// <summary>
+    /// 🔴 <b>الشرطين في SQL: الحالة والبادئة.</b>
+    ///
+    /// <para>⚠️ <b>و<c>r.Status == RackStatus.Active</c> مش
+    /// <c>r.IsActive</c>.</b> التانية <c>[NotMapped]</c> — خاصية
+    /// محسوبة في C# — واستعمالها هنا مابيترجمش وبيخلّي <b>كل</b>
+    /// نداء راكة يرجّع <c>500</c>. والفرق بين السطرين حرف واحد في
+    /// الكود وتوقّف كامل في الميدان.</para>
+    ///
+    /// <para>⚠️ وغير متتبّعة: التحقق قراية بس.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<Rack>> ActiveByKeyPrefixAsync(
+        string keyPrefix, CancellationToken ct = default) =>
+        await db.Racks.AsNoTracking()
+            .Where(r => r.Status == RackStatus.Active && r.KeyPrefix == keyPrefix)
+            .ToListAsync(ct);
 
     // =================================================================
     //  أكواد التفعيل

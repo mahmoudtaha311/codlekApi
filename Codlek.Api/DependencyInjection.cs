@@ -20,6 +20,15 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();
 
+        /*
+          🔴 **حارس مفتاح المحطة — فلتر مش مخطّط تحقّق.**
+
+          سطح الراكة مالوش هوية مستخدم: هو مفتاح جهاز. ولو اتعمل
+          كمخطّط، `ICurrentUser` كانت بترمي أول ما تتنده على طلب
+          راكة لأن مفيش مطالبة شركة.
+        */
+        services.AddScoped<Racks.RackKeyFilter>();
+
         services.AddJwtAuthentication(configuration);
         services.AddValidationProblemShape();
         return services;

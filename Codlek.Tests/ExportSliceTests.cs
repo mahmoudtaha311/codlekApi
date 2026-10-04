@@ -426,6 +426,12 @@ public class ExportSliceTests
         public Task<Rack?> FindAsync(Guid t, Guid id, CancellationToken ct = default) =>
             Task.FromResult<Rack?>(null);
 
+        public Task<IReadOnlyList<Rack>> ActiveByKeyPrefixAsync(
+            string prefix, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Rack>>(
+                Racks.Where(r => r.Status == RackStatus.Active
+                              && r.KeyPrefix == prefix).ToList());
+
         public Task<IReadOnlyList<RackPairingCode>> PendingCodesAsync(
             Guid t, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<RackPairingCode>>([]);
