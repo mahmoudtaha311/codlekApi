@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -23,6 +23,14 @@
     <ProjectReference Include="..\Codlek.Core\Codlek.Core.csproj" />
     <ProjectReference Include="..\Codlek.Application\Codlek.Application.csproj" />
     <ProjectReference Include="..\Codlek.Infrastructure\Codlek.Infrastructure.csproj" />
+
+    <!--
+      ⚠️ مرجع مشروع الـAPI لازم عشان نفحص **السياسات** نفسها،
+      مش النقط بس. المشروع القديم بيفحصها بسيرفر كامل وأربع
+      حسابات و٢٠ مسار — وهنا نفس المصفوفة بتتقاس على كائن
+      `IAuthorizationService` في مللي ثانية.
+    -->
+    <ProjectReference Include="..\Codlek.Api\Codlek.Api.csproj" />
   </ItemGroup>
 
 </Project>
