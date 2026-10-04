@@ -1,8 +1,8 @@
-using Codlek.Application.Account;
-using Codlek.Application.Account.GetAccount;
-using Codlek.Application.Account.UpdateProfile;
-using Codlek.Application.Interfaces;
+using Codlek.Application.Features.Account.GetAccount;
+using Codlek.Application.Features.Account.UpdateProfile;
+using Codlek.Application.Features.Account;
 using Codlek.Application.Interfaces.Repositories;
+using Codlek.Application.Interfaces;
 using Codlek.Core.Entities.Auth;
 using Codlek.Core.Enums;
 

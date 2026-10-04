@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Identity;
 using Codlek.Core.Enums;
+using Microsoft.AspNetCore.Identity;
 
 namespace Codlek.Core.Entities.Auth;
 

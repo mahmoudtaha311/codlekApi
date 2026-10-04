@@ -1,14 +1,14 @@
-using Codlek.Core.Entities.Auth;
-using Codlek.Application.Interfaces;
 using Codlek.Application.Interfaces.Repositories;
+using Codlek.Application.Interfaces;
+using Codlek.Core.Entities.Auth;
 using Codlek.Infrastructure.Auth;
 using Codlek.Infrastructure.Data;
 using Codlek.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Codlek.Infrastructure;
 
@@ -71,6 +71,7 @@ public static class DependencyInjection
           شركة تانية. المستودعات هنا دوالها بتاخد `tenantId` إجباري.
         */
         services.AddScoped<IAccountRepository, AccountRepository>();
+        services.AddScoped<IContainerRepository, ContainerRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 
         return services;

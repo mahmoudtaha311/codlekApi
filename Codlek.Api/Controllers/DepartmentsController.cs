@@ -1,9 +1,9 @@
 using Codlek.Api.Authorization;
 using Codlek.Api.Extensions;
 using Codlek.Application.Contracts.Departments;
-using Codlek.Application.Departments.CreateDepartment;
-using Codlek.Application.Departments.GetDepartments;
-using Codlek.Application.Departments.UpdateDepartment;
+using Codlek.Application.Features.Departments.CreateDepartment;
+using Codlek.Application.Features.Departments.GetDepartments;
+using Codlek.Application.Features.Departments.UpdateDepartment;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

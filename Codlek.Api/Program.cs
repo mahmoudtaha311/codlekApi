@@ -1,8 +1,8 @@
-using Codlek.Api;
 using Codlek.Api.Middlewares;
+using Codlek.Api;
 using Codlek.Application;
-using Codlek.Infrastructure;
 using Codlek.Infrastructure.Auth;
+using Codlek.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 

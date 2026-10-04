@@ -1,10 +1,10 @@
 using Codlek.Application.Abstractions;
 using Codlek.Application.Contracts.Departments;
-using Codlek.Application.Departments;
-using Codlek.Application.Departments.CreateDepartment;
-using Codlek.Application.Departments.UpdateDepartment;
-using Codlek.Application.Interfaces;
+using Codlek.Application.Features.Departments.CreateDepartment;
+using Codlek.Application.Features.Departments.UpdateDepartment;
+using Codlek.Application.Features.Departments;
 using Codlek.Application.Interfaces.Repositories;
+using Codlek.Application.Interfaces;
 using Codlek.Core.Entities;
 using Codlek.Core.Enums;
 

@@ -1,8 +1,8 @@
 using Codlek.Api.Extensions;
-using Codlek.Application.Account.ChangePassword;
-using Codlek.Application.Account.GetAccount;
-using Codlek.Application.Account.UpdateProfile;
 using Codlek.Application.Contracts.Account;
+using Codlek.Application.Features.Account.ChangePassword;
+using Codlek.Application.Features.Account.GetAccount;
+using Codlek.Application.Features.Account.UpdateProfile;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

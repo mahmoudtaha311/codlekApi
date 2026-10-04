@@ -1,9 +1,9 @@
 using System.Security.Claims;
 using Codlek.Api.Extensions;
-using Codlek.Application.Auth.Login;
-using Codlek.Application.Auth.Logout;
-using Codlek.Application.Auth.Refresh;
 using Codlek.Application.Contracts.Auth;
+using Codlek.Application.Features.Auth.Login;
+using Codlek.Application.Features.Auth.Logout;
+using Codlek.Application.Features.Auth.Refresh;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

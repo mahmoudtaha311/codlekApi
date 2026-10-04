@@ -1,8 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 using Codlek.Application.Contracts.Auth;
 using Codlek.Application.Interfaces;
-using Codlek.Core.Entities;
 using Codlek.Core.Entities.Auth;
+using Codlek.Core.Entities;
 using Codlek.Core.Enums;
 using Codlek.Infrastructure.Auth;
 using Codlek.Infrastructure.Data;
