@@ -14,12 +14,19 @@ namespace Codlek.Core.Devices;
 public static class DeviceNaming
 {
     public static string Display(
-        string? manufacturer, string? commercialModelName, string? rawModel)
-    {
-        string model = string.IsNullOrWhiteSpace(commercialModelName)
-            ? rawModel ?? ""
-            : commercialModelName;
+        string? manufacturer, string? commercialModelName, string? rawModel) =>
+        $"{manufacturer} {Model(commercialModelName, rawModel)}".Trim();
 
-        return $"{manufacturer} {model}".Trim();
-    }
+    /// <summary>
+    /// الموديل لوحده — <b>من غير الماركة</b>.
+    ///
+    /// <para>⚠️ التصدير محتاج ده: الماركة عمود مستقل في الشيت،
+    /// فحشرها في عمود الموديل بتدّي «HP HP ProBook». والقاعدة
+    /// (التجاري بيكسب الخام) واحدة في الحالتين — عشان كده
+    /// <see cref="Display"/> بينده الدالة دي بدل ما يكرّرها.</para>
+    /// </summary>
+    public static string Model(string? commercialModelName, string? rawModel) =>
+        string.IsNullOrWhiteSpace(commercialModelName)
+            ? rawModel ?? ""
+            : commercialModelName.Trim();
 }

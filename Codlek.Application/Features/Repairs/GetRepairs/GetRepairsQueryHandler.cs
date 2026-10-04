@@ -26,59 +26,22 @@ public sealed class GetRepairsQueryHandler(
     ICurrentUser me)
     : IRequestHandler<GetRepairsQuery, Result<PagedResult<RepairListItem>>>
 {
-    /// <summary>⚠️ القيمة الوحيدة اللي بتقلب الترتيب. أي حاجة تانية = الأحدث.</summary>
-    private const string Oldest = "oldest";
-
     public async Task<Result<PagedResult<RepairListItem>>> Handle(
         GetRepairsQuery query, CancellationToken cancellationToken)
     {
-        var (page, size) = Paging.Clamp(query.Page, query.PageSize);
+        /*
+          🔴 **الفلتر بيتبني من مكان مشترك مع التصدير.**
 
-        string search = (query.Search ?? "").Trim();
+          لو اتكتب هنا، أول تعديل فيه بيخلّي الملف المصدّر يخالف
+          الشاشة اللي طالع منها — والمدير بيفتح إكسل فيه صفوف مش
+          شايفها ومش عارف ليه.
+        */
+        var filter = RepairFilters.Build(
+            query.Search, query.Status, query.Approval, query.Technician,
+            query.From, query.To, query.Sort, query.Page, query.PageSize);
 
-        var filter = new RepairListFilter
-        {
-            /*
-              ⚠️ **الكود بيتقارن خام، ونص البحث بيتوحّد.**
-
-              كود الأمر لاتيني (<c>RP-00000123</c>) فالتوحيد العربي
-              مالوش لازمة عليه؛ ونص البحث لازم يتوحّد عشان «أحمد»
-              و«احمد» يلاقوا نفس الصف.
-            */
-            ExactCode = search.Length == 0 ? null : search,
-
-            SearchPattern = search.Length == 0
-                ? null
-                : SearchPattern.Contains(ArabicText.Normalize(search)),
-
-            /*
-              🔴 **الفلتر المش مفهوم بيتجاهل — مابيرفضش.</b>
-
-              <c>TryParse</c> بيفشل فالقيمة بتبقى <c>null</c>، يعني
-              «مفيش فلتر». ولو رجّعنا <c>400</c>، رابط محفوظ فيه حالة
-              قديمة كان بيفضّي الشاشة والمدير مش عارف ليه.
-            */
-            Status = Parse<RepairStatus>(query.Status),
-            Approval = Parse<RepairApproval>(query.Approval),
-
-            TechnicianId = query.Technician,
-
-            /*
-              🔴 **المدى نصف مفتوح وبيحترم التوقيت الصيفي.</b>
-
-              <c>CairoDay</c> بتحسب بداية اليوم بتوقيت القاهرة
-              الحقيقي، مش بـ<c>+2</c> ثابتة. ومصر بتقدّم الساعة
-              **نص الليل**، فاليوم اللي بيتقدّم فيه مالوش نص ليل
-              أصلاً — راجع <c>CairoDay</c>.
-            */
-            FromUtc = CairoDay.StartUtc(query.From),
-            ToUtc = CairoDay.AfterUtc(query.To),
-
-            Oldest = string.Equals(query.Sort, Oldest, StringComparison.OrdinalIgnoreCase),
-
-            Page = page,
-            PageSize = size,
-        };
+        int page = filter.Page;
+        int size = filter.PageSize;
 
         var (rows, total) = await repairs.ListAsync(me.TenantId, filter, cancellationToken);
 
@@ -107,16 +70,6 @@ public sealed class GetRepairsQueryHandler(
             TotalPages: Paging.TotalPages(total, size),
             AwaitingApproval: awaiting));
     }
-
-    /// <summary>
-    /// ⚠️ <b>بالاسم مش بالرقم.</b> الداش بورد بتبعت
-    /// <c>status=InProgress</c>؛ و<c>TryParse</c> بيقبل الأرقام كمان،
-    /// فـ<c>status=99</c> بيعدّي كـ<c>(RepairStatus)99</c> ويرجّع
-    /// قايمة فاضية بدل ما يتجاهل. ومنقول زي ما هو — القديم كان بيعمل
-    /// نفس الحاجة، والقايمة الفاضية مش ضرر.
-    /// </summary>
-    private static T? Parse<T>(string? value) where T : struct, Enum =>
-        Enum.TryParse<T>(value, ignoreCase: true, out var parsed) ? parsed : null;
 
     private static RepairListItem Map(RepairListRow r, DateTime nowUtc) =>
         new(

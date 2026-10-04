@@ -21,6 +21,13 @@ public interface IReportRepository
         Guid tenantId, ReportListFilter filter, CancellationToken ct = default);
 
     /// <summary>نفس الفلتر بلا تصفيح — للتصدير.</summary>
+    /// <param name="cap">
+    /// 🔴 <b>سقف الصفوف — والمستودع بيجيب <c>cap + 1</c>.</b>
+    ///
+    /// <para>الصف الزيادة هو اللي بيخلّي المنادي يعرف إن فيه قص
+    /// ويقوله <b>جوّه الملف</b>. ملف مقصوص في صمت بيتقري على إنه كل
+    /// البيانات — والمدير بيبني عليه قرار جرد.</para>
+    /// </param>
     Task<IReadOnlyList<Report>> ExportAsync(
         Guid tenantId, ReportListFilter filter, int cap, CancellationToken ct = default);
 

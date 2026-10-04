@@ -21,8 +21,11 @@ public interface IDeviceRepository
     /// نفس الفلتر، <b>بلا تصفيح</b> — للتصدير.
     /// </summary>
     /// <param name="cap">
-    /// ⚠️ سقف على الصفوف. والقص بيتقال في الملف نفسه — ملف مقصوص
-    /// في صمت بيتقري على إنه كل البيانات.
+    /// 🔴 <b>سقف الصفوف — والمستودع بيجيب <c>cap + 1</c>.</b>
+    ///
+    /// <para>الصف الزيادة هو اللي بيخلّي المنادي يعرف إن فيه قص
+    /// ويقوله <b>جوّه الملف</b>. ملف مقصوص في صمت بيتقري على إنه كل
+    /// البيانات — والمدير بيبني عليه قرار جرد.</para>
     /// </param>
     Task<IReadOnlyList<DeviceExportRow>> ExportAsync(
         Guid tenantId, DeviceListFilter filter, int cap, CancellationToken ct = default);

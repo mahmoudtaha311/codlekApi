@@ -15,35 +15,19 @@ public sealed class SearchAuditQueryHandler(
     ICurrentUser me)
     : IRequestHandler<SearchAuditQuery, Result<PagedResult<AuditEventItem>>>
 {
-    /// <summary>
-    /// ⚠️ <b>٤٠ مش ٢٥</b> — ده سجل بيتقرا بالتمرير، والصفحة
-    /// الصغيرة بتخلّي اللي بيراجع يدوس «بعده» عشرين مرة.
-    /// </summary>
-    private const int DefaultPageSize = 40;
-
     public async Task<Result<PagedResult<AuditEventItem>>> Handle(
         SearchAuditQuery query, CancellationToken cancellationToken)
     {
-        var (page, size) = Paging.Clamp(query.Page, query.PageSize, DefaultPageSize);
+        /*
+          🔴 **الفلتر بيتبني من مكان مشترك مع التصدير** — الملف
+          اللي بيطلع بصفوف غير اللي قدام المالك أسوأ من مفيش ملف.
+        */
+        var filter = AuditSearchFilters.Build(
+            query.From, query.To, query.Action, query.EntityType,
+            query.Actor, query.Search, query.Page, query.PageSize);
 
-        string search = (query.Search ?? "").Trim();
-
-        var filter = new AuditFilter
-        {
-            // 🔴 الحدود بأيام القاهرة زي باقي الشاشات.
-            FromUtc = CairoDay.StartUtc(query.From),
-            ToUtc = CairoDay.AfterUtc(query.To),
-
-            Action = (query.Action ?? "").Trim(),
-            EntityType = (query.EntityType ?? "").Trim(),
-            ActorName = (query.Actor ?? "").Trim(),
-
-            // ⚠️ ومفيش توحيد عربي — القديم بيهرّب وبس.
-            SearchPattern = search.Length == 0 ? null : SearchPattern.Contains(search),
-
-            Page = page,
-            PageSize = size,
-        };
+        int page = filter.Page;
+        int size = filter.PageSize;
 
         var (rows, total) = await audit.SearchAsync(me.TenantId, filter, cancellationToken);
 

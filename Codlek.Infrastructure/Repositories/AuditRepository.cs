@@ -11,6 +11,35 @@ public sealed class AuditRepository(AppDbContext db) : IAuditRepository
     public async Task<(IReadOnlyList<AuditEvent> Rows, int TotalItems)> SearchAsync(
         Guid tenantId, AuditFilter filter, CancellationToken ct = default)
     {
+        var q = Filtered(tenantId, filter);
+
+        int total = await q.CountAsync(ct);
+
+        var rows = await Ordered(q)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync(ct);
+
+        return (rows, total);
+    }
+
+    /// <summary>
+    /// 🔴 <b>نفس الفلتر ونفس الترتيب، <u>بلا تصفيح</u>.</b> الملف
+    /// اللي بيطلع بصفوف غير اللي قدام المالك أسوأ من مفيش ملف.
+    /// </summary>
+    public async Task<IReadOnlyList<AuditEvent>> ExportAsync(
+        Guid tenantId, AuditFilter filter, int cap, CancellationToken ct = default) =>
+
+        // 🔴 **`cap + 1` — المستودع هو اللي بيزوّد صف الكشف.**
+        //
+        // المنادي بيبعت السقف زي ما هو، والصف الزيادة هو اللي
+        // بيخلّيه يعرف إن فيه قص ويقوله **جوّه الملف**. ولو المنادي
+        // هو اللي زوّد، كان لازم كل نقطة تفتكر — وأول واحدة تنسى
+        // بتطلّع ملف مقصوص في صمت.
+        await Ordered(Filtered(tenantId, filter)).Take(cap + 1).ToListAsync(ct);
+
+    private IQueryable<AuditEvent> Filtered(Guid tenantId, AuditFilter filter)
+    {
         var q = db.AuditEvents.AsNoTracking().Where(e => e.TenantId == tenantId);
 
         if (filter.FromUtc is { } from) q = q.Where(e => e.OccurredAtUtc >= from);
@@ -41,23 +70,18 @@ public sealed class AuditRepository(AppDbContext db) : IAuditRepository
                 || EF.Functions.Like(e.ActorName, pattern, SearchPattern.Escape));
         }
 
-        int total = await q.CountAsync(ct);
-
-        var rows = await q
-            .OrderByDescending(e => e.OccurredAtUtc)
-
-            // 🔴 **فاصل التعادل هنا إجباري أكتر من أي قايمة تانية.**
-            //
-            // دفعة إجراءات واحدة (تسليم ٥٠ لاب) بتكتب سطور بنفس
-            // اللحظة بالحرف — ومن غير الفاصل، السطر بيظهر في صفحتين
-            // أو بيختفي، والمراجعة بتبان ناقصة.
-            .ThenByDescending(e => e.Id)
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .ToListAsync(ct);
-
-        return (rows, total);
+        return q;
     }
+
+    /// <summary>
+    /// 🔴 <b>فاصل التعادل هنا إجباري أكتر من أي قايمة تانية.</b>
+    ///
+    /// <para>دفعة إجراءات واحدة (تسليم ٥٠ لاب) بتكتب سطور بنفس
+    /// اللحظة بالحرف — ومن غير الفاصل، السطر بيظهر في صفحتين أو
+    /// بيختفي، والمراجعة بتبان ناقصة.</para>
+    /// </summary>
+    private static IQueryable<AuditEvent> Ordered(IQueryable<AuditEvent> q) =>
+        q.OrderByDescending(e => e.OccurredAtUtc).ThenByDescending(e => e.Id);
 
     public async Task<(IReadOnlyList<string> Actions,
                        IReadOnlyList<string> EntityTypes,

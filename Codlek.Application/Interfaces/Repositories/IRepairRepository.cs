@@ -124,6 +124,19 @@ public interface IRepairRepository
         Guid tenantId, RepairListFilter filter, CancellationToken ct = default);
 
     /// <summary>
+    /// نفس الفلتر ونفس الترتيب، <b>بلا تصفيح</b> — للتصدير.
+    /// </summary>
+    /// <param name="cap">
+    /// 🔴 <b>سقف الصفوف — والمستودع بيجيب <c>cap + 1</c>.</b>
+    ///
+    /// <para>الصف الزيادة هو اللي بيخلّي المنادي يعرف إن فيه قص
+    /// ويقوله <b>جوّه الملف</b>. ملف مقصوص في صمت بيتقري على إنه كل
+    /// البيانات — والمدير بيبني عليه قرار جرد.</para>
+    /// </param>
+    Task<IReadOnlyList<RepairListRow>> ExportAsync(
+        Guid tenantId, RepairListFilter filter, int cap, CancellationToken ct = default);
+
+    /// <summary>
     /// كام أمر واقف على المحاسب — <b>في الشركة كلها</b>.
     ///
     /// <para>🔴 <b>برّه الفلاتر وبرّه التصفيح عن قصد.</b> لو اتحسب

@@ -90,6 +90,17 @@ public sealed class FakeRepairRepository : IRepairRepository
         return Task.FromResult<(IReadOnlyList<RepairListRow>, int)>((ListRows, ListTotal));
     }
 
+    /// <summary>⚠️ بيحفظ الفلتر كمان — فحص «الملف زي الشاشة» بيقارنهم.</summary>
+    public Task<IReadOnlyList<RepairListRow>> ExportAsync(
+        Guid t, RepairListFilter f, int cap, CancellationToken ct = default)
+    {
+        LastFilter = f;
+        LastExportCap = cap;
+        return Task.FromResult<IReadOnlyList<RepairListRow>>(ListRows.Take(cap).ToList());
+    }
+
+    public int LastExportCap;
+
     public Task<int> CountAwaitingApprovalAsync(Guid t, CancellationToken ct = default) =>
         Task.FromResult(Awaiting);
 

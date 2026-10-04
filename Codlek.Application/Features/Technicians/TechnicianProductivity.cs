@@ -143,6 +143,32 @@ internal static class TechnicianProductivity
     }
 
     /// <summary>
+    /// فني واحد بعينه — <b>للتصدير وبس</b>.
+    ///
+    /// <para>🔴 <b>الشاشة بتفلتر بالفني في المتصفح، فالملف لازم
+    /// يفلتر على السيرفر.</b> من غير ده المدير بيفلتر على فني واحد،
+    /// يدوس «تصدير»، ويلاقي <b>كل</b> الفنيين في الملف — وملف
+    /// بيرجّع صفوف غير اللي قدامه أسوأ من مفيش ملف.</para>
+    ///
+    /// <para>⚠️ <b>بالكود مش بالاسم:</b> الاسم بيتغيّر والكود مفتاح
+    /// ثابت، والقايمة في الشاشة بتبعت الكود أصلاً.</para>
+    ///
+    /// <para>⚠️ ومقارنة مضبوطة مش بحث — الكود جاي من قايمة اختيار
+    /// مش من كتابة.</para>
+    /// </summary>
+    public static List<TechnicianListItem> OnlyTechnician(
+        List<TechnicianListItem> items, string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return items;
+
+        string wanted = code.Trim();
+
+        return items
+            .Where(i => string.Equals(i.Code, wanted, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    /// <summary>
     /// ترتيب الجدول — <b>دالة نقية</b>.
     ///
     /// <para>🔴 <b>المفاتيح دي بروتوكول مش نص للعرض.</b> الواجهة

@@ -125,6 +125,50 @@ public sealed class RepairRepository(AppDbContext db) : IRepairRepository
     public async Task<(IReadOnlyList<RepairListRow> Rows, int TotalItems)> ListAsync(
         Guid tenantId, RepairListFilter filter, CancellationToken ct = default)
     {
+        var q = Filtered(tenantId, filter);
+
+        /*
+          🔴 **العدّ بيتعمل على الاستعلام المفلتر وقبل التصفيح.**
+
+          ولو اتعمل بعد `Skip/Take`، «٤٠ من ٤٠» كانت بتظهر على كل
+          صفحة وأزرار التنقّل بتختفي.
+        */
+        int total = await q.CountAsync(ct);
+
+        var rows = await Ordered(q, filter)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .Select(Row)
+            .ToListAsync(ct);
+
+        return (rows, total);
+    }
+
+    /// <summary>
+    /// 🔴 <b>نفس الفلتر ونفس الترتيب بتوع القايمة، <u>بلا
+    /// تصفيح</u>.</b>
+    ///
+    /// <para>الملف اللي بيطلع بصفوف غير اللي قدام المدير أسوأ من
+    /// مفيش ملف — هو بيقارنهم وبيلاقي فرق مالوش تفسير. وعشان كده
+    /// <see cref="Filtered"/> و<see cref="Ordered"/> مكتوبين مرة
+    /// واحدة وبيتندهوا من هنا ومن <see cref="ListAsync"/>.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<RepairListRow>> ExportAsync(
+        Guid tenantId, RepairListFilter filter, int cap, CancellationToken ct = default) =>
+        await Ordered(Filtered(tenantId, filter), filter)
+
+        // 🔴 **`cap + 1` — المستودع هو اللي بيزوّد صف الكشف.**
+        //
+        // المنادي بيبعت السقف زي ما هو، والصف الزيادة هو اللي
+        // بيخلّيه يعرف إن فيه قص ويقوله **جوّه الملف**. ولو المنادي
+        // هو اللي زوّد، كان لازم كل نقطة تفتكر — وأول واحدة تنسى
+        // بتطلّع ملف مقصوص في صمت.
+            .Take(cap + 1)
+            .Select(Row)
+            .ToListAsync(ct);
+
+    private IQueryable<RepairWorkItem> Filtered(Guid tenantId, RepairListFilter filter)
+    {
         var q = db.RepairWorkItems.AsNoTracking().Where(w => w.TenantId == tenantId);
 
         /*
@@ -161,39 +205,27 @@ public sealed class RepairRepository(AppDbContext db) : IRepairRepository
         // 🔴 أصغر من، مش أصغر من أو يساوي — المدى نصف مفتوح.
         if (filter.ToUtc is { } toUtc) q = q.Where(w => w.OpenedAtUtc < toUtc);
 
-        /*
-          🔴 **العدّ بيتعمل على الاستعلام المفلتر وقبل التصفيح.**
+        return q;
+    }
 
-          ولو اتعمل بعد `Skip/Take`، «٤٠ من ٤٠» كانت بتظهر على كل
-          صفحة وأزرار التنقّل بتختفي.
-        */
-        int total = await q.CountAsync(ct);
-
-        /*
-          🔴 **`ThenBy(Id)` إجباري على الفرعين.**
-
-          دفعة أوامر اتفتحت من نفس الفحص بتاخد نفس `OpenedAtUtc`
-          بالمللي ثانية. ومن غير الفاصل، SQL Server **حر** يرتّبهم
-          بأي شكل في كل استعلام — فالصف بيظهر في صفحة ١ وصفحة ٢، وصف
-          تاني مابيظهرش خالص.
-
-          ⚠️ **وده مابيبانش في فحص على عشرة صفوف:** الخطة واحدة في
-          الاستعلامين فالترتيب بيطلع ثابت بالعرض. الفحص الحقيقي على
-          القاعدة بيقرا جملة `ORDER BY` المولّدة ويتأكد إن فيها عمود
-          فريد — راجع `RepairListRepositoryTests`.
-        */
-        q = filter.Oldest
+    /// <summary>
+    /// 🔴 <b><c>ThenBy(Id)</c> إجباري على الفرعين.</b>
+    ///
+    /// <para>دفعة أوامر اتفتحت من نفس الفحص بتاخد نفس
+    /// <c>OpenedAtUtc</c> بالمللي ثانية. ومن غير الفاصل، SQL Server
+    /// <b>حر</b> يرتّبهم بأي شكل في كل استعلام — فالصف بيظهر في صفحة
+    /// ١ وصفحة ٢، وصف تاني مابيظهرش خالص.</para>
+    ///
+    /// <para>⚠️ <b>وده مابيبانش في فحص على عشرة صفوف:</b> الخطة
+    /// واحدة في الاستعلامين فالترتيب بيطلع ثابت بالعرض. الفحص
+    /// الحقيقي بيقرا جملة <c>ORDER BY</c> المولّدة ويتأكد إن فيها
+    /// عمود فريد — راجع <c>RepairListRepositoryTests</c>.</para>
+    /// </summary>
+    private static IQueryable<RepairWorkItem> Ordered(
+        IQueryable<RepairWorkItem> q, RepairListFilter filter) =>
+        filter.Oldest
             ? q.OrderBy(w => w.OpenedAtUtc).ThenBy(w => w.Id)
             : q.OrderByDescending(w => w.OpenedAtUtc).ThenBy(w => w.Id);
-
-        var rows = await q
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .Select(Row)
-            .ToListAsync(ct);
-
-        return (rows, total);
-    }
 
     public Task<int> CountAwaitingApprovalAsync(
         Guid tenantId, CancellationToken ct = default) =>

@@ -16,6 +16,19 @@ public interface IAuditRepository
         Guid tenantId, AuditFilter filter, CancellationToken ct = default);
 
     /// <summary>
+    /// نفس الفلتر ونفس الترتيب، <b>بلا تصفيح</b> — للتصدير.
+    /// </summary>
+    /// <param name="cap">
+    /// 🔴 <b>سقف الصفوف — والمستودع بيجيب <c>cap + 1</c>.</b>
+    ///
+    /// <para>الصف الزيادة هو اللي بيخلّي المنادي يعرف إن فيه قص
+    /// ويقوله <b>جوّه الملف</b>. ملف مقصوص في صمت بيتقري على إنه كل
+    /// البيانات — والمدير بيبني عليه قرار جرد.</para>
+    /// </param>
+    Task<IReadOnlyList<AuditEvent>> ExportAsync(
+        Guid tenantId, AuditFilter filter, int cap, CancellationToken ct = default);
+
+    /// <summary>
     /// القيم الموجودة فعلاً في السجل — <b>للفلاتر</b>.
     ///
     /// <para>⚠️ قايمة ثابتة بكل الأكواد كانت هتدّي فلاتر بتطلّع صفر

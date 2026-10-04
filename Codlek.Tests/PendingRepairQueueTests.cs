@@ -91,6 +91,10 @@ public class PendingRepairQueueTests
             Guid t, RepairListFilter f, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<RepairListRow>> ExportAsync(
+            Guid t, RepairListFilter f, int cap, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<int> CountAwaitingApprovalAsync(Guid t, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
