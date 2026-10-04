@@ -23,7 +23,19 @@ public sealed class GetDeviceTestsQueryHandler(
         if (await devices.FindDetailAsync(me.TenantId, query.DeviceId, cancellationToken) is null)
             return Result.Failure<PagedResult<DeviceTestItem>>(DeviceErrors.NotFound);
 
-        var (page, size) = Paging.Clamp(query.Page, query.PageSize);
+        /*
+          🔴 **الافتراضي ٢٥ هنا، مش ٤٠ زي باقي القوايم.**
+
+          ودي قيمة صريحة في القديم (`Paging(page, pageSize, 25)`)،
+          مش سهو: تاب الفحوص في صفحة اللاب بيتعرض في كارت جمب تابات
+          تانية، و٤٠ صف فيه بيطوّل الصفحة لدرجة إن اللي بعده مابيبانش.
+
+          ⚠️ وخط الزمن كمان على ٢٥ — بس هناك الرقم **ثابت** مش
+          افتراضي، لأنه داخل في حساب الاستراتيجية نفسها.
+        */
+        const int DefaultSize = 25;
+
+        var (page, size) = Paging.Clamp(query.Page, query.PageSize, DefaultSize);
 
         var (rows, total) = await devices.TestsAsync(
             me.TenantId, query.DeviceId, page, size, cancellationToken);

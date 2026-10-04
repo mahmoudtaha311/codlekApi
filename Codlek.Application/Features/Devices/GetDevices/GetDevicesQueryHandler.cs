@@ -122,48 +122,36 @@ public sealed class GetDevicesQueryHandler(
             TotalPages: Paging.TotalPages(total, filter.PageSize)));
     }
 
+    /// <summary>
+    /// ⚠️ <b>تمريرة على المكان المشترك.</b> صفحة اللاب بتبني نفس
+    /// اللوحة بالظبط، ونسختين من القاعدة بيخلّوا الاتنين يختلفوا عن
+    /// نفس اللاب — راجع <see cref="DeviceWhereaboutsMapping"/>.
+    /// </summary>
     private static DeviceWhereabouts Whereabouts(
         DeviceListRow d,
         IReadOnlyDictionary<Guid, string> places,
         IReadOnlyDictionary<Guid, TechnicianLabel> holders,
         IReadOnlyDictionary<Guid, string> floors,
-        DateTime nowUtc)
-    {
-        /*
-          🔴 **فاضي = مش معروف، ومش صفر.**
+        DateTime nowUtc) =>
+        DeviceWhereaboutsMapping.Build(
+            d.Stage,
+            d.StageChangedAtUtc,
+            d.CurrentLocationId,
+            d.CurrentHolderTechnicianId,
+            d.Last?.SourceRackId,
+            places,
+            holders,
+            floors,
+            nowUtc);
 
-          اللاب اللي مرحلته عمرها ما اتغيّرت مالوش «عمر مرحلة»؛
-          والصفر معناه «اتغيّرت دلوقتي» — ودي حاجة تانية خالص.
-          وتحويل المجهول لصفر بيخلّي اللاب الواقف من سنة يطلع أول
-          القايمة في ترتيب «الأقدم».
-        */
-        double? ageHours = d.StageChangedAtUtc is { } since
-            ? Math.Max(0, (nowUtc - since).TotalHours)
-            : null;
-
-        var holder = d.CurrentHolderTechnicianId is { } h && holders.TryGetValue(h, out var t)
-            ? t
-            : new TechnicianLabel("", "");
-
-        return new DeviceWhereabouts(
-            Stage: d.Stage.ToString(),
-            StageText: DeviceOperationalStageText.Arabic(d.Stage),
-            StageChangedAtUtc: d.StageChangedAtUtc,
-            StageAgeHours: ageHours,
-            LocationId: d.CurrentLocationId,
-            LocationName: Text(places, d.CurrentLocationId),
-            HolderTechnicianId: d.CurrentHolderTechnicianId,
-            HolderTechnicianName: holder.Name,
-            HolderTechnicianCode: holder.Code,
-
-            // ⚠️ مكان الراكة اللي فحصته — سؤال مختلف عن «هو فين
-            // دلوقتي».
-            TestedAtFloor: Text(floors, d.Last?.SourceRackId),
-
-            // ⚠️ ووجود مكان حالي هو علامة التسليم.
-            HandedOver: d.CurrentLocationId != null);
-    }
-
+    /// <summary>
+    /// ⚠️ المعرّف المش معروف بيبقى خانة فاضية — مش <c>Guid</c> خام.
+    ///
+    /// <para>⚠️ وفيه نسخة من السطر ده في
+    /// <see cref="DeviceWhereaboutsMapping"/> كمان. التكرار هنا
+    /// مقبول: ده بحث في قاموس مفيهوش قاعدة، بخلاف قواعد «اللاب فين»
+    /// اللي اتلمّت في مكان واحد عشان الصفحة والقايمة ميختلفوش.</para>
+    /// </summary>
     private static string Text(IReadOnlyDictionary<Guid, string> map, Guid? id) =>
         id is { } key && map.TryGetValue(key, out var value) ? value : "";
 }

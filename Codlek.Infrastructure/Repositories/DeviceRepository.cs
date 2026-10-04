@@ -1,4 +1,5 @@
 using Codlek.Application.Interfaces.Repositories;
+using Codlek.Core.Devices;
 using Codlek.Core.Entities;
 using Codlek.Core.Enums;
 using Codlek.Core.Text;
@@ -349,6 +350,96 @@ public sealed class DeviceRepository(AppDbContext db) : IDeviceRepository
             .FirstOrDefaultAsync(d => d.Id == deviceId && d.TenantId == tenantId, ct);
 
     /// <summary>
+    /// 🔴 <b>أربع عدّادات بتلات نطاقات مختلفة.</b>
+    ///
+    /// <para>الفحوص بـ<c>!IsDeleted</c>؛ المراسي <b>كلها</b> والملغية
+    /// معاها؛ واللقطات هي الفحوص اللي معاها لقطة. ولو واحد منهم أخد
+    /// نطاق غيره، الرقم بيخالف عدد الصفوف اللي النقطة التانية
+    /// بترجّعها — والمدير بيشوف «٣ مراسي» وبيفتح التاب يلاقي
+    /// اتنين.</para>
+    ///
+    /// <para>⚠️ <b>وأقدم اسم فني من <u>الفحوص</u> مش من جدول
+    /// الحسابات.</b> فيه فنيين بيشتغلوا على الراكة ومالهمش حساب في
+    /// اللوحة خالص؛ ولو الاسم اتقرا من الجدول، صفحتهم كانت بتفضل
+    /// بلا اسم للأبد. وكمان كود الراكة وكود مستخدم اللوحة الاتنين
+    /// ستة أرقام وبيتصادموا — فالضم على الجدول كان بيدّي اسم غلط.</para>
+    /// </summary>
+    public async Task<DeviceDetailFacts> DetailFactsAsync(
+        Guid tenantId, Device device, CancellationToken ct = default)
+    {
+        var reports = Reports(tenantId).Where(r => r.DeviceId == device.Id);
+
+        int reportCount = await reports.CountAsync(ct);
+
+        int noteCount = await db.DeviceNotes.AsNoTracking()
+            .CountAsync(n => n.TenantId == tenantId && n.DeviceId == device.Id, ct);
+
+        // 🔴 كل المراسي — نفس نطاق `IdentifiersAsync`.
+        int identifierCount = await db.DeviceIdentifiers.AsNoTracking()
+            .CountAsync(i => i.TenantId == tenantId && i.DeviceId == device.Id, ct);
+
+        // ⚠️ عدد الفحوص اللي معاها لقطة، مش عدد القطع.
+        int snapshotCount = await reports
+            .CountAsync(r => r.SnapshotCapturedAtUtc != null, ct);
+
+        var latest = await reports
+            .OrderByDescending(r => r.StartedAtUtc)
+
+            // ⚠️ فاصل تعادل: فحصين اترفعوا في نفس المزامنة بياخدوا
+            // نفس وقت البداية، ومن غيره «آخر فني» بيتقلب بين
+            // التحديثات.
+            .ThenBy(r => r.Id)
+            .Select(r => new
+            {
+                r.StartedAtUtc,
+                r.TechnicianCode,
+                r.TechnicianName,
+                r.SourceRackId,
+            })
+            .FirstOrDefaultAsync(ct);
+
+        /*
+          🔴 **أقدم فحص فيه اسم — ومقيّد باللاب ده.**
+
+          الحدث بيقول «مين اكتشف اللاب»، وده سؤال تاريخي: الاسم
+          متكرر على كل فحص، فلو اتصحّح يوم ما، «أحدث فحص» بيكتب على
+          واقعة قديمة اسم ماكانش موجود وقتها.
+
+          ⚠️ والشرط `TechnicianName != ""` مقصود: فيه فحوص قديمة
+          اسمها مش مكتوب، وأخدها بيرجّع فراغ وكأن الاسم مش موجود
+          خالص.
+        */
+        string firstSeenName = device.FirstSeenByTechnicianCode.Length == 0
+            ? ""
+            : await reports
+                .Where(r => r.TechnicianCode == device.FirstSeenByTechnicianCode
+                         && r.TechnicianName != "")
+                .OrderBy(r => r.StartedAtUtc)
+                .ThenBy(r => r.Id)
+                .Select(r => r.TechnicianName)
+                .FirstOrDefaultAsync(ct) ?? "";
+
+        string containerCode = device.ContainerId is { } containerId
+            ? await db.Containers.AsNoTracking()
+                .Where(c => c.TenantId == tenantId && c.Id == containerId)
+                .Select(c => c.Code)
+                .FirstOrDefaultAsync(ct) ?? ""
+            : "";
+
+        return new DeviceDetailFacts(
+            ReportCount: reportCount,
+            NoteCount: noteCount,
+            IdentifierCount: identifierCount,
+            SnapshotCount: snapshotCount,
+            LatestReportAtUtc: latest?.StartedAtUtc,
+            LatestTechnicianCode: latest?.TechnicianCode ?? "",
+            LatestTechnicianName: latest?.TechnicianName ?? "",
+            LatestRackId: latest?.SourceRackId,
+            FirstSeenTechnicianName: firstSeenName,
+            ContainerCode: containerCode);
+    }
+
+    /// <summary>
     /// 🔴 <b>من غير <c>IsActive</c></b> — الملغية جزء من التاريخ.
     ///
     /// <para>⚠️ والترتيب <c>IsActive</c> تنازلي عشان النشطة تطلع
@@ -407,6 +498,341 @@ public sealed class DeviceRepository(AppDbContext db) : IDeviceRepository
             .ToListAsync(ct);
 
         return (rows, total);
+    }
+
+    // =================================================================
+    //  خط الزمن
+    // =================================================================
+
+    /// <summary>
+    /// ⚠️ <b>حد أمان لصفوف التعادل عند حافة الصفحة.</b> مجموعة
+    /// ضخمة بنفس التوقيت (استيراد دفعة) مالهاش تسحب القاعدة.
+    /// </summary>
+    private const int MaxTieRows = 1000;
+
+    public async Task<DeviceTimelineCounts> TimelineCountsAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default) =>
+        new(
+            Reports: await Reports(tenantId).CountAsync(r => r.DeviceId == deviceId, ct),
+
+            Notes: await db.DeviceNotes.AsNoTracking()
+                .CountAsync(n => n.TenantId == tenantId && n.DeviceId == deviceId, ct),
+
+            // 🔴 العدّ على **نفس** الاتحاد اللي الصفوف بتتقرا منه.
+            RepairMoments: await RepairMoments(tenantId, deviceId).CountAsync(ct),
+
+            Movements: await Movements(tenantId, deviceId).CountAsync(ct));
+
+    public async Task<IReadOnlyList<TimelineReportRow>> TimelineReportsAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default)
+    {
+        var source = Reports(tenantId).Where(r => r.DeviceId == deviceId);
+
+        var rows = await source
+            .OrderByDescending(r => r.StartedAtUtc)
+            .Take(need)
+            .Select(ReportRow)
+            .ToListAsync(ct);
+
+        // الصفحة ما اتملتش؟ يبقى جبنا كل الفحوص أصلاً، مفيش حافة.
+        if (rows.Count < need) return rows;
+
+        var boundary = rows[^1].StartedAtUtc;
+
+        var ties = await source
+            .Where(r => r.StartedAtUtc == boundary)
+            .Take(MaxTieRows)
+            .Select(ReportRow)
+            .ToListAsync(ct);
+
+        return Merge(rows, ties, r => r.StartedAtUtc != boundary, r => r.ReportId);
+    }
+
+    public async Task<IReadOnlyList<TimelineNoteRow>> TimelineNotesAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default) =>
+        await db.DeviceNotes.AsNoTracking()
+            .Where(n => n.TenantId == tenantId && n.DeviceId == deviceId)
+            .OrderByDescending(n => n.CreatedAtUtc)
+
+            // ⚠️ المفتاح `bigint` وترتيبه في SQL هو نفسه ترتيبنا —
+            // فمفيش فخ حافة هنا.
+            .ThenByDescending(n => n.Id)
+            .Take(need)
+            .Select(n => new TimelineNoteRow(n.Id, n.CreatedAtUtc, n.CreatedByName, n.Body))
+            .ToListAsync(ct);
+
+    /// <summary>
+    /// 🔴 <b>قرايتين: اللحظات ضيّقة، وبعدين بيانات الأوامر.</b>
+    ///
+    /// <para>الاتحاد بيضم <b>تلات أعمدة بس</b> (الأمر، الوقت،
+    /// اللحظة). والنسخة الأولى ضمّت الصف الكامل، وEF رمت:</para>
+    ///
+    /// <para><c>Unable to translate set operation after client
+    /// projection has been applied.</c></para>
+    ///
+    /// <para>⚠️ <b>وده بيبني وبيعدّي كل فحوص الوحدة</b> — المستودع
+    /// المزيّف مابيستعملش EF. اللي لقطها فحص على قاعدة حقيقية، ودي
+    /// نفس العائلة بتاعة العيب اللي خلّى
+    /// <c>/api/v1/technicians</c> ترجّع ٥٠٠ والفحوص خضرا.</para>
+    ///
+    /// <para>⚠️ والقراية التانية على <b>الأوامر المميّزة</b> اللي
+    /// طلعت فعلاً — أمر واحد بيدّي خمس لحظات، فقراية لكل لحظة كانت
+    /// بتجيب نفس الصف خمس مرات.</para>
+    /// </summary>
+    public async Task<IReadOnlyList<TimelineRepairMomentRow>> TimelineRepairMomentsAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default)
+    {
+        var moments = await RepairMoments(tenantId, deviceId)
+            .OrderByDescending(m => m.AtUtc)
+            .Take(need)
+            .ToListAsync(ct);
+
+        if (moments.Count >= need)
+        {
+            var boundary = moments[^1].AtUtc;
+
+            var ties = await RepairMoments(tenantId, deviceId)
+                .Where(m => m.AtUtc == boundary)
+                .Take(MaxTieRows)
+                .ToListAsync(ct);
+
+            // ⚠️ مفتاح التفرّد (الأمر + اللحظة) — نفس الأمر بيدّي
+            // خمس لحظات مختلفة.
+            moments = Merge(
+                moments, ties, m => m.AtUtc != boundary, m => (m.RepairId, m.Moment));
+        }
+
+        if (moments.Count == 0) return [];
+
+        var ids = moments.Select(m => m.RepairId).Distinct().ToList();
+
+        var facts = await db.RepairWorkItems.AsNoTracking()
+            .Where(w => w.TenantId == tenantId && ids.Contains(w.Id))
+            .Select(w => new
+            {
+                w.Id,
+                w.PublicCode,
+                w.FaultSummary,
+                w.RepairActions,
+                w.OutcomeReason,
+                PartCount = w.Parts.Count,
+                w.OpenedByActorType,
+                w.OpenedByName,
+                w.AssignedTechnicianId,
+                w.CompletedByTechnicianId,
+            })
+            .ToDictionaryAsync(w => w.Id, ct);
+
+        return moments
+            .Select(m =>
+            {
+                var f = facts.GetValueOrDefault(m.RepairId);
+
+                return new TimelineRepairMomentRow(
+                    RepairId: m.RepairId,
+                    AtUtc: m.AtUtc,
+                    Moment: m.Moment,
+                    PublicCode: f?.PublicCode ?? "",
+                    FaultSummary: f?.FaultSummary ?? "",
+                    RepairActions: f?.RepairActions ?? "",
+                    OutcomeReason: f?.OutcomeReason ?? "",
+                    PartCount: f?.PartCount ?? 0,
+                    OpenedByActorType: f?.OpenedByActorType ?? "",
+                    OpenedByName: f?.OpenedByName ?? "",
+                    AssignedTechnicianId: f?.AssignedTechnicianId,
+                    CompletedByTechnicianId: f?.CompletedByTechnicianId);
+            })
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<TimelineMovementRow>> TimelineMovementsAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default) =>
+        await Movements(tenantId, deviceId)
+            .OrderByDescending(e => e.OccurredAtUtc)
+
+            // ⚠️ المفتاح `bigint` — نفس حجّة الملاحظات.
+            .ThenByDescending(e => e.Id)
+            .Take(need)
+            .Select(e => new TimelineMovementRow(
+                e.Id,
+                e.EventType,
+                e.OccurredAtUtc,
+                e.RecordedAtUtc,
+                e.FromStage,
+                e.ToStage,
+                e.FromLocationId,
+                e.ToLocationId,
+                e.FromTechnicianId,
+                e.ToTechnicianId,
+                e.Reason,
+                e.ActorType,
+                e.ActorName))
+            .ToListAsync(ct);
+
+    /// <summary>
+    /// 🔴 <b>حركات اللاب <u>من غير</u> حركات الصيانة التلاتة.</b>
+    ///
+    /// <para>التلاتة دول بيتكتبوا مع كل تغيير حالة صيانة، وأمر
+    /// الصيانة نفسه معروض بمعلومات أكتر (الرقم، الفني، اللي اتعمل)
+    /// — فعرضهم كمان معناه كل صيانة مكتوبة <b>مرتين في نفس
+    /// اللحظة</b>.</para>
+    ///
+    /// <para>⚠️ والاستبعاد <b>بالنوع</b> مش بمعرّف أمر الصيانة: نقل
+    /// مكان أو تسليم حيازة ممكن يبقى مربوط بأمر صيانة وهو برضه حركة
+    /// حقيقية لازم تبان. والقايمة في
+    /// <c>DeviceMovementTitle.HiddenFromTimeline</c> عشان العنوان
+    /// والفلتر ميختلفوش.</para>
+    /// </summary>
+    private IQueryable<DeviceWorkflowEvent> Movements(Guid tenantId, Guid deviceId) =>
+        db.DeviceWorkflowEvents.AsNoTracking()
+            .Where(e => e.TenantId == tenantId
+                     && e.DeviceId == deviceId
+                     && !DeviceMovementTitle.HiddenFromTimeline.Contains(e.EventType));
+
+    /// <summary>
+    /// كل لحظات الصيانة للّاب ده كاستعلام واحد — <b><c>UNION
+    /// ALL</c></b>.
+    ///
+    /// <para>🔴 <b>اتحاد مش خمس استعلامات.</b> الاتحاد بينزل SQL
+    /// كاستعلام واحد بيقصّ أعلى <c>need</c> صف <b>بعد</b> ما يضم
+    /// الخمسة، وده بالظبط اللي الترتيب محتاجه. خمس استعلامات كل
+    /// واحد بياخد <c>need</c> كانت هتجيب خمس أضعاف الصفوف عشان ترمي
+    /// معظمها، وكمان بتضاعف عدد الذهابات للقاعدة في كل صفحة.</para>
+    ///
+    /// <para>⚠️ <b>و«اتلغى» وقته <c>UpdatedAtUtc</c> مش عمود
+    /// مخصّص.</b> الإلغاء بيغيّر الحالة وبيكتب السبب، ومابيحطّش ولا
+    /// ختم وقت ومابيسجّلش حركة — يعني مفيش في القاعدة ولا صف بيقول
+    /// «اتلغى الساعة كام». و«ملغي» حالة نهائية، فآخر لمسة على الصف
+    /// هي الإلغاء نفسه. ده أقرب دليل متخزّن، مش وقت مخترع.</para>
+    ///
+    /// <para>⚠️ <b>والإنهاء بيملا وقت البداية لو كانت فاضية</b>،
+    /// فأمر اتقفل من غير بداية حقيقية بيدّي «بدأت» و«خلصت» في نفس
+    /// اللحظة. ده اللي الصف بيقوله فعلاً، وإخفاؤه بيخفي إن مفيش
+    /// بداية اتسجّلت.</para>
+    /// </summary>
+    /// <summary>
+    /// 🔴 <b>مفتاح لحظة صيانة — تلات أعمدة وبس.</b>
+    ///
+    /// <para>⚠️ <b>كلاس بخصائص <c>init</c> مش <c>record</c>
+    /// موضعي.</b> الـ<c>record</c> الموضعي بيتعامل عند EF كنداء
+    /// مُنشئ (إسقاط عميل)، و<c>UNION</c> بعده مش قابل للترجمة —
+    /// وده اللي رمى على قاعدة حقيقية.</para>
+    /// </summary>
+    private sealed class MomentKey
+    {
+        public Guid RepairId { get; init; }
+        public DateTime AtUtc { get; init; }
+        public RepairMoment Moment { get; init; }
+    }
+
+    private IQueryable<MomentKey> RepairMoments(Guid tenantId, Guid deviceId)
+    {
+        var source = db.RepairWorkItems.AsNoTracking()
+            .Where(w => w.TenantId == tenantId && w.DeviceId == deviceId);
+
+        /*
+          🔴 **الاتحاد ضيّق: تلات أعمدة بس.**
+
+          النسخة الأولى ضمّت الصف الكامل (بالكود والعطل وعدد القطع)،
+          فEF رمت:
+
+              Unable to translate set operation after client
+              projection has been applied.
+
+          السبب إن الإسقاط لنوع مركّب بيبقى «إسقاط عميل» عند EF،
+          و`UNION` بعده مش قابل للترجمة. وبيانات الأوامر بتتجيب في
+          قراية تانية على الأوامر المميّزة — نفس اللي القديم بيعمله
+          بالظبط.
+
+          ⚠️ **وده بيبني وبيعدّي كل فحوص الوحدة** — المستودع المزيّف
+          مابيستعملش EF. اللي لقطه فحص على قاعدة حقيقية، ودي نفس
+          العائلة بتاعة العيب اللي خلّى `/api/v1/technicians` ترجّع
+          ٥٠٠ والفحوص خضرا.
+
+          ⚠️ والكلاس بخصائص `init` مش `record` موضعي: الـ`record`
+          الموضعي بيتعامل كنداء مُنشئ، وده بالظبط اللي EF مابتقدرش
+          تضم بعده.
+        */
+
+        // ⚠️ الفتح مالوش شرط: الصف مايتكتبش من غير وقت فتح أصلاً.
+        var opened = source.Select(w => new MomentKey
+        {
+            RepairId = w.Id, AtUtc = w.OpenedAtUtc, Moment = RepairMoment.Opened,
+        });
+
+        var started = source
+            .Where(w => w.StartedAtUtc != null)
+            .Select(w => new MomentKey
+            {
+                RepairId = w.Id,
+                AtUtc = w.StartedAtUtc!.Value,
+                Moment = RepairMoment.Started,
+            });
+
+        var completed = source
+            .Where(w => w.Status == RepairStatus.Completed && w.CompletedAtUtc != null)
+            .Select(w => new MomentKey
+            {
+                RepairId = w.Id,
+                AtUtc = w.CompletedAtUtc!.Value,
+                Moment = RepairMoment.Completed,
+            });
+
+        var unable = source
+            .Where(w => w.Status == RepairStatus.UnableToRepair && w.CompletedAtUtc != null)
+            .Select(w => new MomentKey
+            {
+                RepairId = w.Id,
+                AtUtc = w.CompletedAtUtc!.Value,
+                Moment = RepairMoment.Unable,
+            });
+
+        var cancelled = source
+            .Where(w => w.Status == RepairStatus.Cancelled)
+            .Select(w => new MomentKey
+            {
+                RepairId = w.Id, AtUtc = w.UpdatedAtUtc, Moment = RepairMoment.Cancelled,
+            });
+
+        return opened.Concat(started).Concat(completed).Concat(unable).Concat(cancelled);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>تعبير مش دالة</b> — EF لازم تترجمه، فمينفعش يبقى نداء
+    /// عادي جوّه <c>Select</c>.
+    /// </summary>
+    private static readonly System.Linq.Expressions.Expression<
+        Func<Report, TimelineReportRow>> ReportRow =
+        r => new TimelineReportRow(
+            r.Id,
+            r.StartedAtUtc,
+            r.EndedAtUtc,
+            r.DurationMs,
+            r.TechnicianName,
+            r.TechnicianCode,
+            r.PassCount,
+            r.FailCount,
+            r.ErrorCount,
+            r.NotPresentCount,
+            r.SkipCount);
+
+    /// <summary>
+    /// بيدمج صفوف الحافة مع المتعادلين — <b>من غير تكرار</b>.
+    ///
+    /// <para>⚠️ الصفوف اللي <b>قبل</b> الحافة بتتاخد زي ما هي،
+    /// والحافة نفسها بتتبدّل بالمجموعة الكاملة اللي رجعت من
+    /// الاستعلام التاني.</para>
+    /// </summary>
+    private static List<T> Merge<T, TKey>(
+        List<T> rows, List<T> ties, Func<T, bool> beforeBoundary, Func<T, TKey> key)
+    {
+        var merged = rows.Where(beforeBoundary).ToList();
+        var seen = new HashSet<TKey>(merged.Select(key));
+
+        foreach (var tie in ties)
+            if (seen.Add(key(tie))) merged.Add(tie);
+
+        return merged;
     }
 
     public async Task<IReadOnlyList<DeviceNote>> NotesAsync(

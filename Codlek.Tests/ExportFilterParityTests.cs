@@ -59,6 +59,30 @@ public class ExportFilterParityTests
             Guid t, Guid id, CancellationToken ct = default) =>
             Task.FromResult<Device?>(null);
 
+        public Task<DeviceDetailFacts> DetailFactsAsync(
+            Guid t, Device d, CancellationToken ct = default) =>
+            Task.FromResult(new DeviceDetailFacts(0, 0, 0, 0, null, "", "", null, "", ""));
+
+        public Task<DeviceTimelineCounts> TimelineCountsAsync(
+            Guid t, Guid id, CancellationToken ct = default) =>
+            Task.FromResult(new DeviceTimelineCounts(0, 0, 0, 0));
+
+        public Task<IReadOnlyList<TimelineReportRow>> TimelineReportsAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineReportRow>>([]);
+
+        public Task<IReadOnlyList<TimelineNoteRow>> TimelineNotesAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineNoteRow>>([]);
+
+        public Task<IReadOnlyList<TimelineRepairMomentRow>> TimelineRepairMomentsAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineRepairMomentRow>>([]);
+
+        public Task<IReadOnlyList<TimelineMovementRow>> TimelineMovementsAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineMovementRow>>([]);
+
         public Task<IReadOnlyList<DeviceIdentifierRow>> IdentifiersAsync(
             Guid t, Guid id, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<DeviceIdentifierRow>>([]);

@@ -2,10 +2,12 @@ using Codlek.Api.Authorization;
 using Codlek.Api.Extensions;
 using Codlek.Application.Contracts.Common;
 using Codlek.Application.Contracts.Devices;
+using Codlek.Application.Features.Devices.GetDevice;
 using Codlek.Application.Features.Devices.GetDevices;
 using Codlek.Application.Features.Devices.GetIdentifiers;
 using Codlek.Application.Features.Devices.GetNotes;
 using Codlek.Application.Features.Devices.GetTests;
+using Codlek.Application.Features.Devices.GetTimeline;
 using Codlek.Application.Features.Devices.LookupDevice;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -92,6 +94,23 @@ public sealed class DevicesController(ISender sender) : ControllerBase
     /// <para>🔴 المرساة اللي اتلغت هي اللي بتفسّر ليه بوردة اتغيّرت
     /// أو هارد اتبدّل. إخفاؤها بيخلّي الصفحة تقول حاجة ناقصة.</para>
     /// </summary>
+    /// <summary>
+    /// صفحة اللاب.
+    ///
+    /// <para>⚠️ <b>واللاب المدموج بيفتح.</b> دي صفحة تاريخه — اللي
+    /// اندمج في غيره لازم يفتح ويقول إنه اندمج، مش يرجّع
+    /// <c>404</c> على صف القايمة لسه مشاورة عليه.</para>
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<DeviceDetail>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Detail(Guid id, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDeviceQuery(id), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
     [HttpGet("{id:guid}/identifiers")]
     [ProducesResponseType<IReadOnlyList<DeviceIdentifierItem>>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -119,6 +138,25 @@ public sealed class DevicesController(ISender sender) : ControllerBase
         Guid id, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
     {
         var result = await sender.Send(new GetDeviceTestsQuery(id, page, pageSize), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    /// <summary>
+    /// خط زمن اللاب — <b>دمج خمس مصادر</b>.
+    ///
+    /// <para>⚠️ <b>و<c>pageSize</c> بيتجاهل.</b> الحجم ثابت على ٢٥
+    /// لأنه داخل في حساب الاستراتيجية نفسها (كل مصدر بيجيب «الصفحة
+    /// × الحجم» صف). والرد بيقول الحجم <b>الحقيقي</b> — القديم كان
+    /// بيرجّع اللي اتطلب كأنه اتطبّق.</para>
+    /// </summary>
+    [HttpGet("{id:guid}/timeline")]
+    [ProducesResponseType<PagedResult<TimelineEventItem>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Timeline(
+        Guid id, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDeviceTimelineQuery(id, page, pageSize), ct);
 
         return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
     }

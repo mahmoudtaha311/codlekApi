@@ -95,6 +95,20 @@ public interface IDeviceRepository
         Guid tenantId, Guid deviceId, CancellationToken ct = default);
 
     /// <summary>
+    /// أرقام صفحة اللاب وآخر فحص وأقدم فني — <b>في قراية واحدة</b>.
+    ///
+    /// <para>⚠️ ودي سبع قرايات على القاعدة جوّه الدالة، بس المنادي
+    /// بيشوف نداء واحد: الصفحة محتاجة الأربعة عدّادات وآخر فحص
+    /// وأقدم اسم مع بعض، ولو كل واحدة بقت دالة، المعالج كان هيبقى
+    /// سبع أسطر <c>await</c> ورا بعض ومحدّش يعرف إنهم سبع رحلات.</para>
+    ///
+    /// <para>🔴 <b>وكل عدّاد بنطاقه</b> — راجع
+    /// <see cref="DeviceDetailFacts"/>.</para>
+    /// </summary>
+    Task<DeviceDetailFacts> DetailFactsAsync(
+        Guid tenantId, Device device, CancellationToken ct = default);
+
+    /// <summary>
     /// مراسي هوية اللاب — <b>والملغية معاها</b>.
     ///
     /// <para>🔴 <b>فيه نسختين من فلتر المراسي في المشروع:</b> واحدة
@@ -116,6 +130,64 @@ public interface IDeviceRepository
     Task<(IReadOnlyList<DeviceTestRow> Rows, int TotalItems)> TestsAsync(
         Guid tenantId, Guid deviceId, int page, int pageSize,
         CancellationToken ct = default);
+
+    // =================================================================
+    //  خط الزمن
+    // =================================================================
+
+    /// <summary>
+    /// أعداد مصادر خط الزمن — <b>من نفس الاستعلامات اللي الصفوف
+    /// بتتقرا منها</b>.
+    /// </summary>
+    Task<DeviceTimelineCounts> TimelineCountsAsync(
+        Guid tenantId, Guid deviceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// أعلى <paramref name="need"/> فحص — <b>زائد كل المتعادلين
+    /// معاهم</b>.
+    ///
+    /// <para>🔴 <b>وزيادة المتعادلين مش احتياط.</b> مفتاح الترتيب
+    /// بيفك التعادل بمعرّف الصف <b>كنص</b>، وSQL بيرتّب
+    /// <c>uniqueidentifier</c> بترتيب بايتات <b>مختلف</b>. فلو حافة
+    /// القصّة وقعت جوّه مجموعة بنفس التوقيت، اللي SQL بيقصّه مش
+    /// بالضرورة اللي ترتيبنا عايزه — والنتيجة صف بيتكرر في صفحتين
+    /// أو يختفي خالص.</para>
+    ///
+    /// <para>⚠️ والحل: نجيب المجموعة المتعادلة كاملة ونسيب ترتيبنا
+    /// يقرّر. وفيه سقف على صفوف التعادل عشان مجموعة ضخمة
+    /// (استيراد دفعة) ماتسحبش القاعدة.</para>
+    /// </summary>
+    Task<IReadOnlyList<TimelineReportRow>> TimelineReportsAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default);
+
+    /// <summary>
+    /// أعلى <paramref name="need"/> ملاحظة.
+    ///
+    /// <para>⚠️ ومفيش مشكلة الحافة هنا: مفتاح الملاحظة
+    /// <c>bigint</c>، وترتيبه في SQL هو نفسه ترتيب الرقم مصفوفاً
+    /// لتسعتاشر خانة في مفتاحنا — فقصّة SQL بتطابق ترتيبنا
+    /// بالظبط.</para>
+    /// </summary>
+    Task<IReadOnlyList<TimelineNoteRow>> TimelineNotesAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default);
+
+    /// <summary>
+    /// أعلى <paramref name="need"/> لحظة صيانة — <b>زائد
+    /// المتعادلين</b>، نفس فخ الفحوص بالحرف.
+    /// </summary>
+    Task<IReadOnlyList<TimelineRepairMomentRow>> TimelineRepairMomentsAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default);
+
+    /// <summary>
+    /// أعلى <paramref name="need"/> حركة.
+    ///
+    /// <para>🔴 <b>وحركات الصيانة التلاتة مستبعدة</b> — أمر الصيانة
+    /// نفسه معروض بمعلومات أكتر، وعرضهم كمان معناه كل صيانة مكتوبة
+    /// مرتين في نفس اللحظة. والقايمة في
+    /// <c>DeviceMovementTitle.HiddenFromTimeline</c>.</para>
+    /// </summary>
+    Task<IReadOnlyList<TimelineMovementRow>> TimelineMovementsAsync(
+        Guid tenantId, Guid deviceId, int need, CancellationToken ct = default);
 
     /// <summary>ملاحظات اللاب — الأحدث الأول.</summary>
     Task<IReadOnlyList<DeviceNote>> NotesAsync(

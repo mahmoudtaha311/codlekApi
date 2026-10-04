@@ -2,6 +2,8 @@ using Codlek.Application.Features.Devices;
 using Codlek.Application.Features.Devices.GetIdentifiers;
 using Codlek.Application.Features.Devices.GetNotes;
 using Codlek.Application.Features.Devices.GetTests;
+using Codlek.Application.Features.Devices.GetTimeline;
+using Codlek.Core.Devices;
 using Codlek.Application.Features.Devices.LookupDevice;
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Entities;
@@ -56,6 +58,53 @@ public class DeviceDetailSliceTests
 
         public Task<Device?> FindDetailAsync(Guid t, Guid id, CancellationToken ct = default) =>
             Task.FromResult(Devices.FirstOrDefault(d => d.Id == id && d.TenantId == t));
+
+        /// <summary>⚠️ أرقام الصفحة — المعالج بيعدّيها زي ما هي.</summary>
+        public DeviceDetailFacts Facts =
+            new(0, 0, 0, 0, null, "", "", null, "", "");
+
+        public Task<DeviceDetailFacts> DetailFactsAsync(
+            Guid t, Device d, CancellationToken ct = default) => Task.FromResult(Facts);
+
+        /// <summary>⚠️ مصادر خط الزمن — الفحص بيزرعها ويقيس الدمج.</summary>
+        public readonly List<TimelineReportRow> TimelineReports = [];
+        public readonly List<TimelineNoteRow> TimelineNotes = [];
+        public readonly List<TimelineRepairMomentRow> TimelineMoments = [];
+        public readonly List<TimelineMovementRow> TimelineMovements = [];
+
+        /// <summary>⚠️ بيحفظ أكبر `need` اتطلب — فحص التصفيح بيقيسه.</summary>
+        public int LastNeed;
+
+        public Task<DeviceTimelineCounts> TimelineCountsAsync(
+            Guid t, Guid id, CancellationToken ct = default) =>
+            Task.FromResult(new DeviceTimelineCounts(
+                TimelineReports.Count,
+                TimelineNotes.Count,
+                TimelineMoments.Count,
+                TimelineMovements.Count));
+
+        public Task<IReadOnlyList<TimelineReportRow>> TimelineReportsAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default)
+        {
+            LastNeed = need;
+            return Task.FromResult<IReadOnlyList<TimelineReportRow>>(
+                TimelineReports.OrderByDescending(r => r.StartedAtUtc).Take(need).ToList());
+        }
+
+        public Task<IReadOnlyList<TimelineNoteRow>> TimelineNotesAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineNoteRow>>(
+                TimelineNotes.OrderByDescending(n => n.CreatedAtUtc).Take(need).ToList());
+
+        public Task<IReadOnlyList<TimelineRepairMomentRow>> TimelineRepairMomentsAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineRepairMomentRow>>(
+                TimelineMoments.OrderByDescending(m => m.AtUtc).Take(need).ToList());
+
+        public Task<IReadOnlyList<TimelineMovementRow>> TimelineMovementsAsync(
+            Guid t, Guid id, int need, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<TimelineMovementRow>>(
+                TimelineMovements.OrderByDescending(e => e.OccurredAtUtc).Take(need).ToList());
 
         public Task<IReadOnlyList<DeviceIdentifierRow>> IdentifiersAsync(
             Guid t, Guid id, CancellationToken ct = default) =>
@@ -448,6 +497,306 @@ public class DeviceDetailSliceTests
         Assert.Equal(30, result.Value.TotalItems);
         Assert.Equal(2, result.Value.Page);
         Assert.Equal(5, result.Value.Items.Count);
+    }
+
+    /// <summary>
+    /// 🔴 <b>والافتراضي ٢٥، مش ٤٠ بتاع باقي القوايم.</b>
+    ///
+    /// <para>قيمة صريحة في القديم مش سهو: تاب الفحوص بيتعرض في
+    /// كارت جمب تابات تانية، و٤٠ صف فيه بيطوّل الصفحة لدرجة إن اللي
+    /// بعده مابيبانش.</para>
+    ///
+    /// <para>⚠️ ونسخة أولى من المعالج استعملت افتراضي المشروع (٤٠).
+    /// اللي لقطه ضرب HTTP حقيقي — الرد كان بيقول «الحجم ٤٠».</para>
+    /// </summary>
+    [Fact]
+    public async Task The_test_list_defaults_to_twenty_five_a_page()
+    {
+        var (repo, me, device) = Build();
+
+        for (int i = 0; i < 30; i++) repo.Tests.Add(NewTest());
+
+        var result = await new GetDeviceTestsQueryHandler(repo, me)
+            .Handle(new GetDeviceTestsQuery(device.Id, null, null), default);
+
+        Assert.Equal(25, result.Value.PageSize);
+        Assert.Equal(25, result.Value.Items.Count);
+        Assert.Equal(2, result.Value.TotalPages);
+
+        // ⚠️ وده مش افتراضي المشروع — الفحص بيثبّت الفرق.
+        Assert.NotEqual(Core.Paging.Paging.DefaultPageSize, result.Value.PageSize);
+    }
+
+    /// <summary>⚠️ واللي بيطلب حجم بياخده — الافتراضي مش سقف.</summary>
+    [Fact]
+    public async Task A_requested_test_page_size_is_honoured()
+    {
+        var (repo, me, device) = Build();
+
+        for (int i = 0; i < 30; i++) repo.Tests.Add(NewTest());
+
+        var result = await new GetDeviceTestsQueryHandler(repo, me)
+            .Handle(new GetDeviceTestsQuery(device.Id, 1, 10), default);
+
+        Assert.Equal(10, result.Value.PageSize);
+        Assert.Equal(10, result.Value.Items.Count);
+    }
+
+
+    // =================================================================
+    //  خط الزمن — الدمج
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>الصفحات مع بعض بتحتوي كل حدث <u>مرة واحدة</u> بالظبط.</b>
+    ///
+    /// <para>ودي الحاجة اللي بتكسر فعلاً: حدث بيظهر في صفحتين، أو
+    /// حدث بيختفي خالص. التاريخ بيبان معقول في الحالتين — واللي
+    /// بيبص مش بيعرف إن فيه حاجة ناقصة.</para>
+    /// </summary>
+    [Fact]
+    public async Task Every_timeline_event_appears_on_exactly_one_page()
+    {
+        var (repo, me, device) = Build();
+
+        var start = new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);
+
+        /*
+          ⚠️ أحداث من **تلات** مصادر مخلوطة في نفس المدى الزمني،
+          عشان الدمج يتقاس مش ترتيب مصدر واحد.
+        */
+        for (int i = 0; i < 20; i++)
+        {
+            repo.TimelineReports.Add(new TimelineReportRow(
+                Guid.NewGuid(), start.AddMinutes(i * 3), null, 0, "محمود", "T001",
+                0, 0, 0, 0, 0));
+
+            repo.TimelineNotes.Add(new TimelineNoteRow(
+                i + 1, start.AddMinutes(i * 3 + 1), "كريم", "ملاحظة " + i));
+
+            repo.TimelineMovements.Add(new TimelineMovementRow(
+                i + 1, DeviceWorkflowEventType.LocationMoved,
+                start.AddMinutes(i * 3 + 2), start.AddMinutes(i * 3 + 2),
+                DeviceOperationalStage.Tested, DeviceOperationalStage.Tested,
+                null, null, null, null, "", "User", "كريم"));
+        }
+
+        var handler = new GetDeviceTimelineQueryHandler(repo, me);
+
+        var first = await handler.Handle(
+            new GetDeviceTimelineQuery(device.Id, 1, null), default);
+
+        int total = first.Value.TotalItems;
+        int pages = first.Value.TotalPages;
+
+        // ٦٠ صف + حدث الاكتشاف
+        Assert.Equal(61, total);
+        Assert.Equal(3, pages);
+
+        var seen = new List<string>();
+
+        for (int page = 1; page <= pages; page++)
+        {
+            var result = await handler.Handle(
+                new GetDeviceTimelineQuery(device.Id, page, null), default);
+
+            seen.AddRange(result.Value.Items.Select(
+                i => i.Kind + "|" + i.AtUtc.Ticks + "|" + (i.NoteBody ?? "")));
+        }
+
+        Assert.Equal(total, seen.Count);
+        Assert.Equal(total, seen.Distinct().Count());
+    }
+
+    /// <summary>🔴 <b>والترتيب نازل — الأحدث فوق.</b></summary>
+    [Fact]
+    public async Task The_timeline_runs_newest_first()
+    {
+        var (repo, me, device) = Build();
+        var start = new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);
+
+        for (int i = 0; i < 10; i++)
+        {
+            repo.TimelineNotes.Add(new TimelineNoteRow(
+                i + 1, start.AddHours(i), "كريم", "ملاحظة " + i));
+        }
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 1, null), default);
+
+        var times = result.Value.Items.Select(i => i.AtUtc).ToList();
+
+        Assert.Equal(times.OrderByDescending(t => t), times);
+    }
+
+    /// <summary>
+    /// 🔴 <b>حدث الاكتشاف موجود دايماً — ولاب لسه ماتفحصش عنده حدث
+    /// واحد.</b>
+    ///
+    /// <para>⚠️ وده مسقط من صف اللاب مش صف في جدول، فالإجمالي
+    /// بيزوّد واحد بالإيد — ولو اتنسي، آخر صفحة بتبقى فيها حدث
+    /// ومحدّش يوصلها.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_device_with_no_history_still_has_its_discovery_event()
+    {
+        var (repo, me, device) = Build();
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 1, null), default);
+
+        Assert.Equal(1, result.Value.TotalItems);
+        Assert.Equal(1, result.Value.TotalPages);
+
+        var only = Assert.Single(result.Value.Items);
+
+        Assert.Equal(nameof(DeviceTimelineEventType.DeviceDiscovered), only.Kind);
+        Assert.Equal("تم اكتشاف الجهاز لأول مرة", only.Title);
+    }
+
+    /// <summary>
+    /// 🔴 <b>والرد بيقول حجم الصفحة <u>الحقيقي</u>.</b>
+    ///
+    /// <para>القديم بياخد <c>pageSize</c> في العنوان، مابيستعملهوش،
+    /// وبيرجّعه في الرد كأنه اتطبّق — يعني اللي بيطلب ٥٠ بياخد ٢٥
+    /// والرد بيقوله «الحجم ٥٠». السلوك اتنقل زي ما هو والكدبة
+    /// اتشالت.</para>
+    /// </summary>
+    [Fact]
+    public async Task The_requested_page_size_is_ignored_and_the_response_says_so()
+    {
+        var (repo, me, device) = Build();
+        var start = new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);
+
+        for (int i = 0; i < 40; i++)
+        {
+            repo.TimelineNotes.Add(new TimelineNoteRow(
+                i + 1, start.AddMinutes(i), "كريم", "ملاحظة"));
+        }
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 1, 50), default);
+
+        Assert.Equal(DeviceTimelineOrder.PageSize, result.Value.PageSize);
+        Assert.Equal(DeviceTimelineOrder.PageSize, result.Value.Items.Count);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>وكل مصدر بيتطلب منه «الصفحة × ٢٥» صف</b> — مش كل
+    /// التاريخ.
+    /// </summary>
+    [Fact]
+    public async Task Each_source_is_asked_for_page_times_size_rows()
+    {
+        var (repo, me, device) = Build();
+
+        for (int i = 0; i < 100; i++)
+        {
+            repo.TimelineNotes.Add(new TimelineNoteRow(
+                i + 1, DateTime.UtcNow.AddMinutes(-i), "كريم", "ملاحظة"));
+        }
+
+        await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 3, null), default);
+
+        Assert.Equal(75, repo.LastNeed);
+    }
+
+    /// <summary>
+    /// 🔴 <b>لحظة الصيانة بتتعرض بأمرها، ومفيش حركة مكرّرة
+    /// جنبها.</b>
+    ///
+    /// <para>الاستبعاد في الاستعلام، فالفحص ده بيقيس إن المعالج
+    /// مابيضيفهمش من مصدر تاني. والاستعلام نفسه عليه فحص على قاعدة
+    /// حقيقية.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_repair_moment_is_shown_without_a_duplicate_movement()
+    {
+        var (repo, me, device) = Build();
+        var at = new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);
+
+        repo.TimelineMoments.Add(new TimelineRepairMomentRow(
+            Guid.NewGuid(), at, RepairMoment.Started, "RP-00000001",
+            "الكيبورد", "", "", 0, "User", "كريم", null, null));
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 1, null), default);
+
+        var started = result.Value.Items.Single(
+            i => i.Kind == nameof(DeviceTimelineEventType.RepairStarted));
+
+        Assert.Equal("بدأت الصيانة", started.Title);
+        Assert.Contains("أمر RP-00000001", started.Summary);
+
+        Assert.DoesNotContain(result.Value.Items,
+            i => i.Kind == nameof(DeviceTimelineEventType.DeviceMoved));
+    }
+
+    /// <summary>
+    /// 🔴 <b>ومين المنفّذ بيختلف باختلاف اللحظة.</b> «اتفتح» ممكن
+    /// يعمله مدير، و«بدأت» الفني المُسنَد، و«خلصت» اللي قفل — وساعات
+    /// تلات ناس مختلفين.
+    /// </summary>
+    [Fact]
+    public async Task Each_repair_moment_names_its_own_actor()
+    {
+        var (repo, me, device) = Build();
+        var at = new DateTime(2026, 9, 1, 8, 0, 0, DateTimeKind.Utc);
+        var repair = Guid.NewGuid();
+
+        repo.TimelineMoments.Add(new TimelineRepairMomentRow(
+            repair, at, RepairMoment.Opened, "RP-1",
+            "عطل", "", "", 0, "User", "المدير كريم", null, null));
+
+        repo.TimelineMoments.Add(new TimelineRepairMomentRow(
+            repair, at.AddHours(1), RepairMoment.Cancelled, "RP-1",
+            "", "", "العميل سحب اللاب", 0, "User", "المدير كريم", null, null));
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 1, null), default);
+
+        var opened = result.Value.Items.Single(
+            i => i.Kind == nameof(DeviceTimelineEventType.RepairOpened));
+
+        var cancelled = result.Value.Items.Single(
+            i => i.Kind == nameof(DeviceTimelineEventType.RepairCancelled));
+
+        Assert.Equal("المدير كريم", opened.ActorName);
+
+        // 🔴 والإلغاء مالوش منفّذ — اسم مخمّن هنا كان هيبقى اتهام.
+        Assert.Equal("", cancelled.ActorName);
+        Assert.Contains("العميل سحب اللاب", cancelled.Summary);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>و<c>reportId</c> بترجع <c>null</c> دايماً</b> — خانة
+    /// ميتة متنقولة زي ما هي، واللوحة مابتقراهاش.
+    /// </summary>
+    [Fact]
+    public async Task The_timeline_report_id_is_always_null()
+    {
+        var (repo, me, device) = Build();
+
+        repo.TimelineReports.Add(new TimelineReportRow(
+            Guid.NewGuid(), DateTime.UtcNow, null, 0, "محمود", "T001", 0, 0, 0, 0, 0));
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(device.Id, 1, null), default);
+
+        Assert.All(result.Value.Items, i => Assert.Null(i.ReportId));
+    }
+
+    [Fact]
+    public async Task The_timeline_404s_on_an_unknown_device()
+    {
+        var (repo, me, _) = Build();
+
+        var result = await new GetDeviceTimelineQueryHandler(repo, me)
+            .Handle(new GetDeviceTimelineQuery(Guid.NewGuid(), 1, null), default);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(DeviceErrors.NotFound, result.Error);
     }
 
     // =================================================================
