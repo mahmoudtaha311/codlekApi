@@ -147,9 +147,16 @@ public class RepairListRepositoryTests(RepairListDbFixture fixture)
         await repo.ListAsync(tenant, new RepairListFilter { Oldest = true });
         await repo.ListForDeviceAsync(tenant, device.Id);
 
+        /*
+          ⚠️ **آخر `ORDER BY` مش أول واحد** — عشان أي استعلام فرعي
+          في الإسقاط يبقى ليه ترتيبه الخاص، وده بيظهر قبل الترتيب
+          الخارجي في نص SQL. (الإسقاط هنا مالوش ترتيب فرعي النهاردة،
+          بس الفحص اللي بيقطع من أول واحد بيبقى هشّ — وكسر فعلاً في
+          قايمة الأجهزة.)
+        */
         var ordered = sql
             .Where(line => line.Contains("ORDER BY", StringComparison.Ordinal))
-            .Select(line => line[line.IndexOf("ORDER BY", StringComparison.Ordinal)..])
+            .Select(line => line[line.LastIndexOf("ORDER BY", StringComparison.Ordinal)..])
             .ToList();
 
         // ⚠️ تلات استعلامات بترتيب: الأحدث، الأقدم، وتبويب الجهاز.
