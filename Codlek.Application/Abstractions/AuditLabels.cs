@@ -44,6 +44,13 @@ public static class AuditLabels
             [AuditActions.BrandAliasRemoved] = "شيل اسم بديل من ماركة",
             [AuditActions.DepartmentCreated] = "إنشاء قسم",
             [AuditActions.DepartmentUpdated] = "تعديل قسم",
+            [AuditActions.TechnicianCreated] = "إنشاء فني",
+            [AuditActions.TechnicianSuspended] = "إيقاف فني",
+            [AuditActions.TechnicianActivated] = "إعادة تفعيل فني",
+            [AuditActions.TechnicianPasswordReset] = "إعادة تعيين كلمة مرور فني",
+            [AuditActions.TechnicianUpdated] = "تعديل بيانات فني",
+            [AuditActions.TechnicianCapabilityChanged] = "تعديل صلاحيات فني",
+            [AuditActions.TechnicianBrandsChanged] = "تغيير ماركات فني",
         };
 
     public static string Action(string? action)

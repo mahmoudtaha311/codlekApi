@@ -69,4 +69,31 @@ public static class AuditActions
     public const string DevicesMarkedReady = "device.marked_ready";
 
     public const string DevicesHandedOver = "device.handed_over";
+
+    // =================================================================
+    //  حسابات الفنيين
+    // =================================================================
+
+    /// <summary>
+    /// ⚠️ نوع الكيان هنا <c>"Technician"</c> بحرف كبير — زي
+    /// <c>"Device"</c> و<c>"Department"</c>، ومش زي <c>"repair"</c>.
+    /// الفرق موجود في بيانات الإنتاج واتنقل زي ما هو.
+    /// </summary>
+    public const string TechnicianCreated = "technician.created";
+
+    public const string TechnicianSuspended = "technician.suspended";
+
+    public const string TechnicianActivated = "technician.activated";
+
+    public const string TechnicianPasswordReset = "technician.password_reset";
+
+    public const string TechnicianUpdated = "technician.updated";
+
+    /// <summary>
+    /// 🔴 سطر منفصل عن «اتعدّلت البيانات» — تعديل اسم مالوش يسيب
+    /// سطر «اتغيّرت الصلاحيات».
+    /// </summary>
+    public const string TechnicianCapabilityChanged = "technician.capability_changed";
+
+    public const string TechnicianBrandsChanged = "technician.brands_changed";
 }
