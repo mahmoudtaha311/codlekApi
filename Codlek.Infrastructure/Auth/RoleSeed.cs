@@ -18,22 +18,6 @@ namespace Codlek.Infrastructure.Auth;
 public static class RoleSeed
 {
     /// <summary>
-    /// الأسماء العربية — <b>دي بس اللي مكتوبة بالإيد</b>.
-    ///
-    /// <para>⚠️ ولو دور جديد مالوش اسم عربي هنا، بناخد اسم الـenum زي
-    /// ما هو بدل ما نرمي. الدور الناقص اسمه بيبان وحش في الشاشة —
-    /// وده أهون بكتير من إن النظام مايقلّعش.</para>
-    /// </summary>
-    private static readonly Dictionary<UserRole, string> ArabicNames = new()
-    {
-        [UserRole.Technician]   = "فني",
-        [UserRole.Manager]      = "مدير",
-        [UserRole.Owner]        = "مالك",
-        [UserRole.FloorManager] = "مشرف صالة",
-        [UserRole.Accountant]   = "محاسب",
-    };
-
-    /// <summary>
     /// كل الأدوار اللي لازم تكون في الجدول، باسمها الإنجليزي والعربي.
     ///
     /// <para>⚠️ الاسم الإنجليزي = اسم الـenum بالحرف، عشان
@@ -44,5 +28,5 @@ public static class RoleSeed
             .Select(r => (
                 Role: r,
                 Name: r.ToString(),
-                ArabicName: ArabicNames.TryGetValue(r, out var ar) ? ar : r.ToString()));
+                ArabicName: UserRoleText.Arabic(r)));
 }

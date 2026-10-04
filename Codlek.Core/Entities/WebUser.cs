@@ -103,12 +103,10 @@ public class WebUser
     public Guid? DepartmentId { get; set; }
 
     [NotMapped]
-    public string RoleText => Role switch
-    {
-        UserRole.Owner => "مدير عام",
-        UserRole.Manager => "مدير المخزن",
-        UserRole.FloorManager => "مدير الدور",
-        UserRole.Accountant => "محاسب",
-        _ => "فني"
-    };
+    /// <summary>
+    /// ⚠️ <b>منادي، مش نسخة.</b> النصوص كانت مكتوبة هنا
+    /// ومكررة في زرع الأدوار، و<b>النسختين اختلفو فعلاً</b> —
+    /// راجع <see cref="UserRoleText"/>.
+    /// </summary>
+    public string RoleText => UserRoleText.Arabic(Role);
 }

@@ -51,14 +51,44 @@ public class IdentityWiringTests
             Assert.Equal(role.ToString(), name);
     }
 
-    /// <summary>⚠️ وكل دور له اسم عربي — مفيش اسم إنجليزي بيظهر للمستخدم.</summary>
+    /// <summary>
+    /// 🔴 <b>الأسماء العربية دي بتتعرض للمستخدم — فهي عقد.</b>
+    ///
+    /// <para>وكانت مكتوبة في مكانين واختلفوا فعلاً: <c>WebUser.RoleText</c>
+    /// كان بيقول «مدير عام» و«مدير المخزن»، وزرع الأدوار كان بيقول
+    /// «مالك» و«مدير». يعني نفس الشخص باسم دور مختلف على حسب الشاشة.</para>
+    ///
+    /// <para>⚠️ والنصوص هنا مكتوبة بالإيد عن قصد — ده الغرض من الفحص:
+    /// لو حد غيّر <see cref="UserRoleText"/>، الفحص يقع ويقول إن اللي
+    /// بيتعرض في الشاشة اتغيّر.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(UserRole.Owner, "مدير عام")]
+    [InlineData(UserRole.Manager, "مدير المخزن")]
+    [InlineData(UserRole.FloorManager, "مدير الدور")]
+    [InlineData(UserRole.Accountant, "محاسب")]
+    [InlineData(UserRole.Technician, "فني")]
+    public void The_arabic_role_names_are_frozen(UserRole role, string expected) =>
+        Assert.Equal(expected, UserRoleText.Arabic(role));
+
+    /// <summary>
+    /// ⚠️ وزرع الأدوار بياخد من نفس المكان — <b>مش نسخة</b>.
+    ///
+    /// <para>الفحص ده هو اللي بيمنع النسختين يرجعوا يفترقوا.</para>
+    /// </summary>
     [Fact]
-    public void Every_role_has_an_arabic_name()
+    public void Role_seeding_uses_the_same_arabic_names()
+    {
+        foreach (var (role, _, arabicName) in RoleSeed.All())
+            Assert.Equal(UserRoleText.Arabic(role), arabicName);
+    }
+
+    /// <summary>⚠️ ومفيش دور اسمه العربي = اسمه الإنجليزي (يعني ناسي).</summary>
+    [Fact]
+    public void Every_role_has_a_real_arabic_name()
     {
         foreach (var (role, name, arabicName) in RoleSeed.All())
             Assert.NotEqual(name, arabicName);
-
-        Assert.Equal("فني", RoleSeed.All().Single(r => r.Role == UserRole.Technician).ArabicName);
     }
 
     // =================================================================

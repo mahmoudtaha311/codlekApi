@@ -93,7 +93,7 @@ public sealed class LegacyPasswordHasher : IPasswordHasher<ApplicationUser>
                 : PasswordVerificationResult.Failed;
         }
 
-        var result = _modern.VerifyHashedPassword(user, hashedPassword, providedPassword);
+        var result = VerifyModern(user, hashedPassword, providedPassword);
 
         /*
           🔴 **ملح سايب: البصمة جديدة والعلامة لسه مليانة.**
@@ -113,6 +113,41 @@ public sealed class LegacyPasswordHasher : IPasswordHasher<ApplicationUser>
             return PasswordVerificationResult.SuccessRehashNeeded;
 
         return result;
+    }
+
+    /// <summary>
+    /// التحقق بالشكل الجديد — <b>وبصمة تالفة بترجع «غلط» مش عطل</b>.
+    ///
+    /// <para>🔴 <b>`PasswordHasher` بترمي <c>FormatException</c> لو
+    /// البصمة المخزّنة مش base64 سليم.</b> ومعناها إن الطلب بياخد
+    /// <c>500</c> بدل «كلمة المرور غلط» — فالمستخدم بيشوف «في مشكلة
+    /// في السيرفر» ومايعرفش يعمل إيه.</para>
+    ///
+    /// <para>⚠️ <b>والحالة دي واردة وقت نقل الحسابات:</b> سكريبت
+    /// بيحطّ عمود في مكان عمود تاني، والنتيجة إن <b>كل</b> الناس
+    /// بتاخد <c>500</c> على الدخول. وأسوأ حاجة إن السجل بيقول
+    /// «FormatException» — كلام مالوش علاقة بالسبب.</para>
+    ///
+    /// <para>⚠️ <b>وبنمسك <c>FormatException</c> وبس.</b> أي استثناء
+    /// تاني بيكمّل طريقه: إخفاء كل الأعطال هنا بيخلّي عطل حقيقي في
+    /// التشفير يبان «الباسورد غلط».</para>
+    /// </summary>
+    private PasswordVerificationResult VerifyModern(
+        ApplicationUser user, string hashedPassword, string providedPassword)
+    {
+        try
+        {
+            return _modern.VerifyHashedPassword(user, hashedPassword, providedPassword);
+        }
+        catch (FormatException)
+        {
+            // ⚠️ الصف ده محتاج حد يبصّ عليه — مش محتاج المستخدم
+            // يحاول تاني. والمعرّف في الرسالة عشان يتلاقى.
+            Console.Error.WriteLine(
+                $"🔴 بصمة الباسورد تالفة للمستخدم {user.Id} — الصف محتاج إعادة تعيين.");
+
+            return PasswordVerificationResult.Failed;
+        }
     }
 
     /// <summary>

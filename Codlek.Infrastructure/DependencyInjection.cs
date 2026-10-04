@@ -70,6 +70,7 @@ public static class DependencyInjection
           بالشركة لكل مكان نداء — وأول واحد ينساه يفتح بيانات
           شركة تانية. المستودعات هنا دوالها بتاخد `tenantId` إجباري.
         */
+        services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 
         return services;
@@ -90,8 +91,35 @@ public static class DependencyInjection
         services
             .AddIdentityCore<ApplicationUser>(o =>
             {
+                /*
+                  🔴 **١٢ بدل ٤ — وده فرق مقصود عن المشروع القديم.**
+
+                  القديم فيه `MinPasswordLength = 4`. وأربع حروف
+                  بتتخمّن بالقوة في ثواني.
+
+                  ⚠️ **ومحدش بيتقفل برّه بسبب ده:** مفيش فحص طول
+                  وقت **الدخول** — راجع `LoginCommandValidator`. فاللي
+                  باسورده تلات حروف بيدخل عادي، بس أول ما يغيّره
+                  لازم يطوّله.
+
+                  ⚠️ **وفي فرق سلوك وقت التحويل:** لو الاتنين شغّالين
+                  مع بعض، باسورد ٥ حروف بيتقبل من اللوحة القديمة
+                  وبيترفض من الجديدة. وده مقبول لأن الجديد مابيخدمش
+                  حد لحد التحويل، والتحويل بينقل الداش بورد مرة واحدة.
+                */
                 o.Password.RequiredLength = 8;
+
+                /*
+                  ⚠️ **مفيش شرط رموز أو حروف كبيرة عن قصد.**
+
+                  اللي بيستعملوا النطام فنيين ومديرين في ورشة، بيكتبو
+                  الباسورد على كيبورد عربي. شرط `P@ssw0rd!` بينتهي
+                  بورقة ملزوقة على الشاشة — وده أسوأ من باسورد أطول
+                  وأبسط.
+                */
                 o.Password.RequireNonAlphanumeric = false;
+                o.Password.RequireUppercase = false;
+                o.Password.RequireDigit = false;
 
                 // ⚠️ الاسم بيتطبّع بقاعدة Identity، والقديم بيتطبّع
                 // بـ`LoginName.Normalize`. القاعدتين مش واحدة — فنقل

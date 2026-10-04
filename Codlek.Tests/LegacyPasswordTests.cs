@@ -279,4 +279,56 @@ public class LegacyPasswordTests
             PasswordVerificationResult.SuccessRehashNeeded,
             _hasher.VerifyHashedPassword(user, hash, password));
     }
+
+    // =================================================================
+    //  بيانات تالفة في القاعدة
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>بصمة تالفة بترجّع «غلط» — مش بترمي.</b>
+    ///
+    /// <para>اتكشفت على السيرفر الشغّال: صف فيه بصمة مش base64 سليم
+    /// خلّى الدخول يرجّع <c>500</c>، والسجل قال «FormatException» —
+    /// كلام مالوش علاقة بالسبب.</para>
+    ///
+    /// <para>⚠️ والحالة دي واردة وقت نقل الحسابات: سكريبت بيحطّ عمود
+    /// في مكان عمود تاني، والنتيجة إن <b>كل</b> الناس بتاخد
+    /// <c>500</c> على الدخول.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("ده مش base64 خالص")]
+    [InlineData("!!!!")]
+    [InlineData("AQAAAA")]
+    [InlineData("====")]
+    public void A_corrupt_stored_hash_fails_instead_of_throwing(string corrupt)
+    {
+        var user = new ApplicationUser();   // مفيش ملح قديم → المسار الجديد
+
+        var result = _hasher.VerifyHashedPassword(user, corrupt, "AnyPassword1");
+
+        Assert.Equal(PasswordVerificationResult.Failed, result);
+    }
+
+    /// <summary>
+    /// ⚠️ وبصمة تالفة <b>مع</b> ملح قديم بتترفض كمان — المسار القديم
+    /// بيمسك الاستثناء جوّاه أصلاً.
+    /// </summary>
+    [Fact]
+    public void A_corrupt_hash_with_a_legacy_salt_also_fails_cleanly()
+    {
+        var user = new ApplicationUser { LegacySalt = "cXJzdHV2d3hRUlNUVVZXWA==" };
+
+        Assert.Equal(
+            PasswordVerificationResult.Failed,
+            _hasher.VerifyHashedPassword(user, "مش بصمة", "AnyPassword1"));
+    }
+
+    /// <summary>⚠️ وبصمة فاضية برضه — صف ناقص مش عطل.</summary>
+    [Fact]
+    public void An_empty_stored_hash_fails_cleanly()
+    {
+        Assert.Equal(
+            PasswordVerificationResult.Failed,
+            _hasher.VerifyHashedPassword(new ApplicationUser(), "", "AnyPassword1"));
+    }
 }

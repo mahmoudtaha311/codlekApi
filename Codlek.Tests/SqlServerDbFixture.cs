@@ -1,0 +1,45 @@
+using Codlek.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace Codlek.Tests;
+
+/// <summary>
+/// قاعدة بيانات للرمي — <b>واحدة لكل مجموعة فحوص</b>.
+///
+/// <para>🔴 <b>مش <c>codlek_test</c> ومش <c>codlek_dev</c>.</b> دي
+/// فحوص بتكتب وتمسح صفوف. لو شاركت قاعدة مع حاجة تانية، فحص بيقع
+/// بسبب صف سايب من فحص تاني — وده أسوأ نوع فشل: بيظهر ويختفي على
+/// مزاجه.</para>
+///
+/// <para>🔴 <b>وكل كلاس فحوص ليه قاعدة باسم لوحده.</b> xunit بيشغّل
+/// الكلاسات <b>بالتوازي</b>، وكل واحد بيعمل نسخة من الـfixture
+/// بتاعته. فلو الاسم مشترك، اتنين بيعملوا
+/// <c>EnsureDeleted</c>/<c>EnsureCreated</c> على نفس القاعدة في نفس
+/// اللحظة — والنتيجة فحوص بتقع بأخطاء مالهاش علاقة بالكود.</para>
+/// </summary>
+public abstract class SqlServerDbFixture : IDisposable
+{
+    protected abstract string DatabaseName { get; }
+
+    public string ConnectionString =>
+        "Server=localhost;Database=" + DatabaseName + ";Trusted_Connection=True;" +
+        "TrustServerCertificate=True;MultipleActiveResultSets=True";
+
+    protected SqlServerDbFixture()
+    {
+        using var db = Create();
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
+    }
+
+    public AppDbContext Create() =>
+        new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(ConnectionString)
+            .Options);
+
+    public void Dispose()
+    {
+        using var db = Create();
+        db.Database.EnsureDeleted();
+    }
+}

@@ -66,6 +66,22 @@ public class ApplicationUser : IdentityUser<Guid>
     public DateTime? SuspendedAtUtc { get; set; }
 
     /// <summary>
+    /// اتعمل إمتى — بيتعرض في صفحة «حسابي».
+    ///
+    /// <para>⚠️ موجود في <c>WebUser</c> وبيخرج في عقد
+    /// <c>AccountResponse</c>، فلازم يعيش.</para>
+    /// </summary>
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// آخر دخول — <c>null</c> يعني عمره ما دخل.
+    ///
+    /// <para>🔴 <b>وده مش للعرض بس.</b> حساب مادخلش من شهور
+    /// ولسه مفعّل = موظف ساب الشغل ومحدش وقّف حسابه.</para>
+    /// </summary>
+    public DateTime? LastLoginUtc { get; set; }
+
+    /// <summary>
     /// ملح الباسورد القديم — <b>عشان الباسوردات الموجودة تفضل شغّالة</b>.
     ///
     /// <para>🔴 النظام القديم بيخزّن البصمة والملح في عمودين منفصلين
