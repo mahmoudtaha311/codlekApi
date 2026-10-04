@@ -693,7 +693,12 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
         using var db = server.CreateDb();
 
-        Assert.Equal(1, await db.SyncBatches.CountAsync(b => b.BatchId == batchId));
+        var row = await db.SyncBatches.SingleAsync(b => b.BatchId == batchId);
+
+        // 🔴 الرد الطازة هو نفس المخزّن بالحرف — يعني الاتنين اتكتبوا
+        //    بـ`RackWire.Wire` (مش إعدادات الموقع اللي فيها محوّل تواريخ).
+        Assert.Equal(firstBody, row.ResponseJson);
+        Assert.Equal(2, row.ItemCount);
     }
 
     /// <summary>
@@ -927,7 +932,10 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
         try
         {
-            var device = Item("device", Device(deviceId));
+            var dto = Device(deviceId);
+            dto.LastKnownModel = "OURS-15";
+
+            var device = Item("device", dto);
 
             var root = await ReadAsync(await PostAsync(Batch(batchId, device)));
 
@@ -936,9 +944,18 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
             Assert.NotEqual("Rejected", StatusOf(root, device.OutboxId));
 
+            // ⚠️ والعدّاد اترجّع قبل الإعادة — الجهاز اتعدّ مرة واحدة.
+            var summary = root.GetProperty("summary");
+
+            Assert.Equal(1,
+                summary.GetProperty("applied").GetInt32() + summary.GetProperty("unchanged").GetInt32());
+
             using var db = server.CreateDb();
 
             Assert.Equal(1, await db.Devices.CountAsync(d => d.Id == deviceId));
+
+            // 🔴 الإعادة اتحفظت فعلاً — مش بس اتردّ «اتطبّق».
+            Assert.Equal("OURS-15", (await db.Devices.SingleAsync(d => d.Id == deviceId)).LastKnownModel);
             Assert.Equal(1, await db.SyncBatches.CountAsync(b => b.BatchId == batchId));
         }
         finally
@@ -986,6 +1003,264 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
         {
             server.BeforeTrySave = null;
         }
+    }
+
+    // =================================================================
+    //  ٨ · حواف الحمولة
+    // =================================================================
+
+    /// <summary>⚠️ عنصر <c>null</c> في المصفوفة بيتجاهل — مش ٥٠٠ على الدفعة كلها.</summary>
+    [Fact]
+    public async Task A_null_item_in_the_array_is_skipped()
+    {
+        var device = Item("device", Device(Guid.NewGuid()));
+
+        var root = await ReadAsync(await PostAsync(new
+        {
+            batchId = Guid.NewGuid(),
+            rackCode = "R-BATCH",
+            items = new[] { null, device.Body },
+        }));
+
+        Assert.Single(root.GetProperty("results").EnumerateArray());
+        Assert.Equal("Applied", StatusOf(root, device.OutboxId));
+    }
+
+    /// <summary>⚠️ الهاش بحروف كبيرة هو نفس الهاش — المقارنة من غير حساسية.</summary>
+    [Fact]
+    public async Task An_upper_case_hash_still_matches()
+    {
+        var dto = Device(Guid.NewGuid());
+        string payload = JsonSerializer.Serialize(dto);
+
+        var device = Item("device", raw: payload, hash: Sha(payload).ToUpperInvariant());
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), device)));
+
+        Assert.True(ResultFor(root, device.OutboxId).GetProperty("hashMatch").GetBoolean());
+    }
+
+    /// <summary>
+    /// ⚠️ <b>جهاز من غير رقم = «خانات ناقصة» على مستوى الدفعة</b> —
+    /// مايوصلش للمطبّق أصلاً.
+    /// </summary>
+    [Fact]
+    public async Task A_device_without_an_id_is_missing_fields()
+    {
+        var device = Item("device", Device(Guid.Empty));
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), device)));
+
+        Assert.Equal(
+            SyncBatchCodes.MissingFields,
+            ErrorOf(root, device.OutboxId).GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// 🔴 <b>فحص من غير تاريخ بداية لازم يترفض هنا.</b> الاستقبال
+    /// بيتجاهله من غير ما يسمّيه في <c>RejectedById</c> — فلو عدّى
+    /// البوابة دي كان هيرجع «اتطبّق» والراكة تمسحه وهو مااتخزّنش.
+    /// </summary>
+    [Fact]
+    public async Task A_report_without_a_start_time_is_missing_fields_not_applied()
+    {
+        var deviceId = Guid.NewGuid();
+
+        var dto = Report(deviceId);
+        dto.StartedAtUtc = default;
+
+        var report = Item("report", dto);
+
+        var root = await ReadAsync(await PostAsync(
+            Batch(Guid.NewGuid(), Item("device", Device(deviceId)), report)));
+
+        Assert.Equal("Rejected", StatusOf(root, report.OutboxId));
+        Assert.Equal(
+            SyncBatchCodes.MissingFields,
+            ErrorOf(root, report.OutboxId).GetProperty("code").GetString());
+
+        using var db = server.CreateDb();
+
+        Assert.False(await db.Reports.AnyAsync(r => r.Id == dto.Id));
+    }
+
+    /// <summary>
+    /// 🔴 <b>الراكات القديمة بتبعت <c>Device</c> بحرف كبير.</b> الترتيب
+    /// والتوزيع لازم يتجاهلوا الحالة، وإلا الجهاز بيتطبّق بعد فحصه أو
+    /// مابيتطبّقش خالص.
+    /// </summary>
+    [Fact]
+    public async Task A_capitalised_type_from_an_old_rack_is_understood()
+    {
+        var deviceId = Guid.NewGuid();
+
+        var report = Item("Report", Report(deviceId));
+        var device = Item("Device", Device(deviceId));
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), report, device)));
+
+        Assert.Equal("Applied", StatusOf(root, device.OutboxId));
+        Assert.Equal("Applied", StatusOf(root, report.OutboxId));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>نفس الفحص في دفعة جديدة = «اتطبّق» على الصف، بس مش
+    /// بيتعدّ.</b> الراكة لازم تقفل الصف؛ وعدّاد المحطة مايزيدش على
+    /// فحص وصل قبل كده.
+    /// </summary>
+    [Fact]
+    public async Task Resending_a_known_report_in_a_new_batch_is_not_counted_again()
+    {
+        var deviceId = Guid.NewGuid();
+        var dto = Report(deviceId);
+
+        await ReadAsync(await PostAsync(
+            Batch(Guid.NewGuid(), Item("device", Device(deviceId)), Item("report", dto))));
+
+        int before = await ReportsReceivedAsync();
+
+        var again = Item("report", dto);
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), again)));
+
+        Assert.Equal("Applied", StatusOf(root, again.OutboxId));
+
+        var summary = root.GetProperty("summary");
+
+        Assert.Equal(0, summary.GetProperty("reportsApplied").GetInt32());
+        Assert.Equal(1, summary.GetProperty("unchanged").GetInt32());
+        Assert.Equal(before, await ReportsReceivedAsync());
+    }
+
+    /// <summary>
+    /// ⚠️ <b>أمر مقفول بييجي بلقطة أقدم = «زي ما هو».</b> الراكة بتقفل
+    /// الصف، والعدّاد بيقول «من غير تغيير».
+    /// </summary>
+    [Fact]
+    public async Task An_older_snapshot_of_a_closed_order_is_unchanged()
+    {
+        var deviceId = Guid.NewGuid();
+        var workItemId = Guid.NewGuid();
+
+        RepairWorkItemSyncPayload Order(RepairStatus status) => new()
+        {
+            Id = workItemId,
+            DeviceId = deviceId,
+            Status = (int)status,
+            OpenedAtUtc = DateTime.UtcNow.AddHours(-2),
+        };
+
+        await ReadAsync(await PostAsync(Batch(
+            Guid.NewGuid(),
+            Item("device", Device(deviceId)),
+            Item("workitem", Order(RepairStatus.Completed)))));
+
+        var stale = Item("workitem", Order(RepairStatus.InProgress));
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), stale)));
+
+        Assert.Equal("Unchanged", StatusOf(root, stale.OutboxId));
+        Assert.Equal(1, root.GetProperty("summary").GetProperty("unchanged").GetInt32());
+        Assert.Equal(0, root.GetProperty("summary").GetProperty("applied").GetInt32());
+    }
+
+    /// <summary>
+    /// 🔴 <b>الحزام التاني: جسم من غير طول معلن.</b> طلب <c>chunked</c>
+    /// بيعدّي فحص الترويسة — والقراية نفسها هي اللي بتوقفه.
+    /// </summary>
+    [Fact]
+    public async Task A_chunked_body_over_the_limit_is_413()
+    {
+        var huge = Item("device", raw: new string('a', (int)Core.Sync.SyncLimits.MaxBodyBytes));
+
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(Batch(Guid.NewGuid(), huge));
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v2/sync/batch")
+        {
+            Content = new StreamContent(new UnknownLengthStream(bytes)),
+        };
+
+        request.Content.Headers.ContentType = new("application/json");
+        request.Headers.TryAddWithoutValidation(RackKey.Header, server.Key);
+        request.Headers.TryAddWithoutValidation("X-Client-Version", Version);
+
+        using var response = await _client.SendAsync(request);
+
+        Assert.Null(request.Content.Headers.ContentLength);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+    }
+
+    /// <summary>
+    /// 🔴 <b>سجل التكرار بالمحطة — مش بمعرّف الدفعة لوحده.</b> محطة
+    /// تانية بنفس معرّف الدفعة (صدفة أو تلاعب) مالهاش تاخد رد غيرها.
+    /// </summary>
+    [Fact]
+    public async Task Another_racks_reply_for_the_same_batch_id_is_not_replayed()
+    {
+        var batchId = Guid.NewGuid();
+
+        using (var db = server.CreateDb())
+        {
+            var other = new Rack
+            {
+                TenantId = server.TenantId,
+                RackCode = "R-" + Guid.NewGuid().ToString("N")[..8],
+                Name = "محطة تانية",
+            };
+
+            db.Racks.Add(other);
+
+            db.SyncBatches.Add(new SyncBatch
+            {
+                TenantId = server.TenantId,
+                RackId = other.Id,
+                BatchId = batchId,
+                ResponseJson = Reply(batchId, applied: 55),
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var device = Item("device", Device(Guid.NewGuid()));
+
+        using var response = await PostAsync(Batch(batchId, device));
+
+        Assert.False(response.Headers.Contains("Idempotent-Replay"));
+
+        var root = await ReadAsync(response);
+
+        Assert.Equal(1, root.GetProperty("summary").GetProperty("applied").GetInt32());
+        Assert.Equal("Applied", StatusOf(root, device.OutboxId));
+    }
+
+    /// <summary>مجرى من غير طول معروف — عشان <c>HttpClient</c> يبعت chunked.</summary>
+    private sealed class UnknownLengthStream(byte[] data) : Stream
+    {
+        private readonly MemoryStream _inner = new(data);
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            _inner.Read(buffer, offset, count);
+
+        public override void Flush() { }
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
     }
 
     // =================================================================

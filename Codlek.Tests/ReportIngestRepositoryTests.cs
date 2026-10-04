@@ -532,6 +532,42 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
         Assert.NotNull(stored.LastSeenAtUtc);
     }
 
+    /// <summary>
+    /// ⚠️ <b>نسخة البرنامج: الفاضي مابيمسحش، والطويل بيتقص على طول
+    /// العمود</b> — نسخة صالحة ممكن توصل ٤٣ حرف، والعمود ٤٠، والقص
+    /// أحسن من ٥٠٠ بعد ما الشغل اتسجّل.
+    /// </summary>
+    [Fact]
+    public async Task The_app_version_is_kept_when_blank_and_clipped_when_long()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var rack = new Rack
+        {
+            TenantId = tenant, RackCode = "RACK-903", Name = "ج", AppVersion = "1.9.0.0",
+        };
+
+        db.Racks.Add(rack);
+
+        await db.SaveChangesAsync();
+
+        var repo = new RackRepository(db);
+
+        await repo.TouchAsync(rack.Id, 0, appVersion: "   ");
+
+        using (var fresh = fixture.Create())
+            Assert.Equal("1.9.0.0", (await fresh.Racks.SingleAsync(r => r.Id == rack.Id)).AppVersion);
+
+        await repo.TouchAsync(rack.Id, 0, appVersion: " 2147483647.2147483647.2147483647.2147483647 ");
+
+        using var after = fixture.Create();
+
+        Assert.Equal(
+            "2147483647.2147483647.2147483647.2147483",
+            (await after.Racks.SingleAsync(r => r.Id == rack.Id)).AppVersion);
+    }
+
     /// <summary>⚠️ ومحطة تانية مابتتلمسش.</summary>
     [Fact]
     public async Task Touching_one_rack_leaves_the_others_alone()
