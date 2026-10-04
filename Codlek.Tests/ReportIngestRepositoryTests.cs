@@ -651,4 +651,205 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
         Assert.Contains("LP-10900001", stored.SearchText);
         Assert.Contains("100200", stored.SearchText);
     }
+
+    // =================================================================
+    //  سلسلة الدمج — على قاعدة حقيقية
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>اسم مستعار على شاهد قبر لازم يوصل للجهاز الحيّ.</b>
+    ///
+    /// <para>ودي الحالة اللي كانت بتضيّع شغل: «أ ← ب» اتعمل، وبعدين
+    /// ب اتدمج في ج. الدمج <b>مابيعيدش توجيه</b> الاسم المستعار
+    /// القديم، فأ لسه بيشاور على ب — وب بقى شاهد قبر
+    /// (<c>Merged</c>).</para>
+    ///
+    /// <para>⚠️ والقديم في مسار الاستقبال كان بيقرا الاسم المستعار
+    /// <b>خطوة واحدة</b> ويرجّع ب — جهاز ميّت.</para>
+    /// </summary>
+    [Fact]
+    public async Task An_alias_onto_a_merged_device_reaches_the_living_one()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var merged = NewDevice(db, tenant, "LP-11000001");
+        var canonical = NewDevice(db, tenant, "LP-11000002");
+
+        await db.SaveChangesAsync();
+
+        // ب اتدمج في ج — والصف بيفضل كشاهد قبر.
+        merged.Status = DeviceLifecycleStatus.Merged;
+        merged.MergedIntoDeviceId = canonical.Id;
+
+        // وأ (معرّف راكة محلي) بيشاور على ب.
+        var local = Guid.NewGuid();
+
+        db.DeviceAliases.Add(new DeviceAlias
+        {
+            TenantId = tenant,
+            AliasDeviceId = local,
+            CanonicalDeviceId = merged.Id,
+        });
+
+        await db.SaveChangesAsync();
+
+        using var fresh = fixture.Create();
+
+        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
+            new DeviceReferenceRepository(fresh));
+
+        Assert.Equal(canonical.Id, await resolver.ResolveAsync(tenant, local));
+
+        // ⚠️ وشاهد القبر نفسه بيوصل للحيّ كمان.
+        Assert.Equal(canonical.Id, await resolver.ResolveAsync(tenant, merged.Id));
+    }
+
+    /// <summary>⚠️ والجهاز الحيّ بيرجّع نفسه، والمجهول مابيظهرش.</summary>
+    [Fact]
+    public async Task A_live_device_resolves_to_itself_and_an_unknown_one_vanishes()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var device = NewDevice(db, tenant, "LP-11100001");
+
+        await db.SaveChangesAsync();
+
+        var unknown = Guid.NewGuid();
+
+        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
+            new DeviceReferenceRepository(db));
+
+        var map = await resolver.ResolveManyAsync(tenant, [device.Id, unknown]);
+
+        Assert.Equal(device.Id, map[device.Id]);
+        Assert.False(map.ContainsKey(unknown));
+    }
+
+    /// <summary>
+    /// 🔴 <b>والترجمة مربوطة بالشركة</b> — جهاز ورشة تانية بيبقى
+    /// مجهول، مش بيتربط.
+    /// </summary>
+    [Fact]
+    public async Task A_device_in_another_workshop_is_unknown_not_linked()
+    {
+        using var db = fixture.Create();
+        var mine = NewTenant(db);
+        var theirs = NewTenant(db);
+
+        var hers = NewDevice(db, theirs, "LP-11200001");
+
+        await db.SaveChangesAsync();
+
+        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
+            new DeviceReferenceRepository(db));
+
+        Assert.Null(await resolver.ResolveAsync(mine, hers.Id));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والاسم المستعار بتاع ورشة تانية مابيتبعش</b> — بس
+    /// الحزام اللي بيمنع ده مش اللي ممكن تتوقعه.
+    ///
+    /// <para>🔴 <b>ترشيح الشركة على جدول الأسامي المستعارة <u>زيادة
+    /// مقسومة</u>:</b> شيلناه بتحوير والفحص عدّى. السبب إن السلسلة
+    /// بتنتهي دايماً عند <b>صف جهاز في الشركة دي</b> — واستعلام
+    /// الحالة مربوط بالشركة، فالاسم المسرّب بيوصّل لمعرّف مالوش صف
+    /// عندنا.</para>
+    ///
+    /// <para>⚠️ والتسريب محتاج الترشيح يتشال <b>و</b> نفس الـGuid
+    /// يبقى جهاز في الورشتين — وده عملياً مش بيحصل. سايبين الحزام
+    /// بردو، والفحص ده بيثبّت <b>النتيجة</b> مش الحزام.</para>
+    /// </summary>
+    [Fact]
+    public async Task An_alias_in_another_workshop_is_unknown()
+    {
+        using var db = fixture.Create();
+        var mine = NewTenant(db);
+        var theirs = NewTenant(db);
+
+        var hers = NewDevice(db, theirs, "LP-11300001");
+
+        await db.SaveChangesAsync();
+
+        var local = Guid.NewGuid();
+
+        db.DeviceAliases.Add(new DeviceAlias
+        {
+            TenantId = theirs,
+            AliasDeviceId = local,
+            CanonicalDeviceId = hers.Id,
+        });
+
+        await db.SaveChangesAsync();
+
+        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
+            new DeviceReferenceRepository(db));
+
+        // 🔴 ورشتي مابتشوفهوش.
+        Assert.Null(await resolver.ResolveAsync(mine, local));
+
+        // ⚠️ وحراسة: ورشتهم بتشوفه — فالفحص بيقيس الترشيح مش الغياب.
+        Assert.Equal(hers.Id, await resolver.ResolveAsync(theirs, local));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>و<c>Merged</c> من غير معرّف هدف مش شاهد قبر</b> —
+    /// بيانات ناقصة، فالصف نفسه هو الإجابة بدل ما نلف على فاضي.
+    ///
+    /// <para>🔴 وتحوير خلّى المستودع يحط معرّف مخترع مكان الفاضي
+    /// <b>ونجا</b>، لأن الفحص اللي كان بيغطّي الحالة دي بيستعمل
+    /// المزيّف — والمزيّف بيبني الحالة بإيده. فالقياس لازم يعدّي من
+    /// القاعدة.</para>
+    /// </summary>
+    [Fact]
+    public async Task Merged_with_no_target_resolves_to_itself_from_the_database()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var device = NewDevice(db, tenant, "LP-11400001");
+
+        await db.SaveChangesAsync();
+
+        device.Status = DeviceLifecycleStatus.Merged;
+        device.MergedIntoDeviceId = null;
+
+        await db.SaveChangesAsync();
+
+        using var fresh = fixture.Create();
+
+        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
+            new DeviceReferenceRepository(fresh));
+
+        Assert.Equal(device.Id, await resolver.ResolveAsync(tenant, device.Id));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>و<c>Guid.Empty</c> كهدف دمج مش هدف كمان</b> — نفس
+    /// المعنى بشكل تاني.
+    /// </summary>
+    [Fact]
+    public async Task Merged_into_an_empty_guid_resolves_to_itself()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var device = NewDevice(db, tenant, "LP-11500001");
+
+        await db.SaveChangesAsync();
+
+        device.Status = DeviceLifecycleStatus.Merged;
+        device.MergedIntoDeviceId = Guid.Empty;
+
+        await db.SaveChangesAsync();
+
+        using var fresh = fixture.Create();
+
+        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
+            new DeviceReferenceRepository(fresh));
+
+        Assert.Equal(device.Id, await resolver.ResolveAsync(tenant, device.Id));
+    }
 }

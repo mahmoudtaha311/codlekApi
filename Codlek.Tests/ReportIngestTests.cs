@@ -21,7 +21,7 @@ namespace Codlek.Tests;
 /// </summary>
 public class ReportIngestTests
 {
-    private sealed class FakeIngest : IReportIngestRepository
+    private sealed class FakeIngest : IReportIngestRepository, IDeviceReferenceRepository
     {
         public readonly Dictionary<Guid, Report> Reports = [];
         public readonly HashSet<Guid> Devices = [];
@@ -59,6 +59,25 @@ public class ReportIngestTests
         public Task<Guid?> CanonicalForAliasAsync(
             Guid t, Guid alias, CancellationToken ct = default) =>
             Task.FromResult(Aliases.TryGetValue(alias, out var c) ? c : (Guid?)null);
+
+        /// <summary>
+        /// ⚠️ <b>والمزيّف بيعمل الترجمة كمان</b> — الجهاز الموجود في
+        /// <c>Devices</c> بيبقى «حيّ»، واللي في <c>Aliases</c> بيبقى
+        /// مستعار. سلسلة الدمج ليها فحوصها لوحدها.
+        /// </summary>
+        public Task<IReadOnlyDictionary<Guid, DeviceMergeState>> DeviceStatesAsync(
+            Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, DeviceMergeState>>(
+                ids.Where(Devices.Contains).ToDictionary(
+                    id => id,
+                    _ => new DeviceMergeState { Status = DeviceLifecycleStatus.Active }));
+
+        public Task<IReadOnlyDictionary<Guid, Guid>> AliasTargetsAsync(
+            Guid tenantId, IReadOnlyCollection<Guid> aliasIds,
+            CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(
+                Aliases.Where(p => aliasIds.Contains(p.Key))
+                    .ToDictionary(p => p.Key, p => p.Value));
 
         public Task<IReadOnlyList<Guid>> DevicesByIdentifierAsync(
             Guid t, DeviceIdentifierKind kind, string value,
@@ -117,7 +136,8 @@ public class ReportIngestTests
         return new Harness(
             repo, work,
             new IngestReportsCommandHandler(
-                repo, work, NullLogger<IngestReportsCommandHandler>.Instance),
+                repo, new DeviceReferenceResolver(repo), work,
+                NullLogger<IngestReportsCommandHandler>.Instance),
             Guid.NewGuid(),
             Guid.NewGuid());
     }
@@ -467,21 +487,29 @@ public class ReportIngestTests
     /// مكرر</b> بدل الكانوني.
     /// </summary>
     [Fact]
-    public async Task An_alias_wins_over_the_id_the_rack_sent()
+    public async Task An_alias_resolves_to_the_canonical_device()
     {
         var h = Build();
 
-        var alias = Guid.NewGuid();
+        var local = Guid.NewGuid();
         var canonical = Guid.NewGuid();
 
-        h.Repo.Aliases[alias] = canonical;
+        /*
+          ⚠️ **والمعرّف المحلي مالوش صف جهاز — وده شكل الواقع.**
 
-        // ⚠️ المستعار **موجود** كجهاز كمان — عشان الفحص يقيس
-        //    الأولوية مش الغياب.
-        h.Repo.Devices.Add(alias);
+          لما السيرفر يتعرّف على جهاز الراكة بمراسيه، بيضيف **اسم
+          مستعار** ومابيعملش صف جديد. فالمعرّف اللي الراكة بتبعته
+          مالوش وجود في جدول الأجهزة خالص.
+
+          🔴 **ونسخة أولى من الفحص ده كانت بتحط المعرّف في الجدولين**
+          عشان «تقيس الأولوية» — وهي حالة **مستحيلة** في النظام،
+          والمسارين في القديم بيختلفوا عليها أصلاً. الفحص اللي تحت
+          بيقيس الأولوية الحقيقية: صف **شاهد قبر**.
+        */
+        h.Repo.Aliases[local] = canonical;
         h.Repo.Devices.Add(canonical);
 
-        await Run(h, Payload(deviceId: alias));
+        await Run(h, Payload(deviceId: local));
 
         Assert.Equal(canonical, Assert.Single(h.Repo.Added).DeviceId);
     }

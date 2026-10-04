@@ -16,6 +16,7 @@ namespace Codlek.Application.Features.Rack.IngestReports;
 /// <inheritdoc cref="IngestReportsCommand"/>
 public sealed class IngestReportsCommandHandler(
     IReportIngestRepository reports,
+    DeviceReferenceResolver deviceReference,
     IUnitOfWork unitOfWork,
     ILogger<IngestReportsCommandHandler> log)
     : IRequestHandler<IngestReportsCommand, Result<IngestResult>>
@@ -42,14 +43,20 @@ public sealed class IngestReportsCommandHandler(
 
         var existing = await reports.ExistingAsync(command.TenantId, ids, cancellationToken);
 
-        // ⚠️ الأجهزة اللي الفحوص بتشاور عليها — استعلام واحد للدفعة
-        //    كلها بدل واحد لكل فحص.
+        /*
+          ⚠️ **الأجهزة اللي الفحوص بتشاور عليها — ترجمة واحدة
+          للدفعة كلها.**
+
+          والترجمة دي بتتبع سلسلة الدمج: اسم مستعار ← شاهد قبر ←
+          الجهاز الحيّ. القديم كان بيقرا جدول الأجهزة مباشرةً وبيرجّع
+          شاهد القبر.
+        */
         var referenced = list
             .Where(r => r.DeviceId.HasValue && r.DeviceId.Value != Guid.Empty)
             .Select(r => r.DeviceId!.Value)
             .ToHashSet();
 
-        var known = await reports.KnownDeviceIdsAsync(
+        var resolved = await deviceReference.ResolveManyAsync(
             command.TenantId, referenced, cancellationToken);
 
         // ⚠️ ومين عمل كل فحص — استعلام واحد للدفعة كلها كمان.
@@ -86,7 +93,7 @@ public sealed class IngestReportsCommandHandler(
 
             string raw = JsonSerializer.Serialize(dto, Json);
 
-            var link = await ResolveDeviceAsync(command, dto, known, cancellationToken);
+            var link = await ResolveDeviceAsync(command, dto, resolved, cancellationToken);
 
             if (existing.TryGetValue(dto.Id, out var row))
             {
@@ -422,24 +429,35 @@ public sealed class IngestReportsCommandHandler(
     /// </summary>
     private async Task<DeviceLink> ResolveDeviceAsync(
         IngestReportsCommand command, LaptopReportPayload dto,
-        HashSet<Guid> known, CancellationToken ct)
+        IReadOnlyDictionary<Guid, Guid> resolved, CancellationToken ct)
     {
         if (dto.DeviceId.HasValue && dto.DeviceId.Value != Guid.Empty)
         {
             /*
-              🔴 **الترجمة قبل أي حاجة.**
+              🔴 **الترجمة قبل أي حاجة — وبالسلسلة الكاملة.**
 
               الراكة بتبعت بمعرّفها المحلي، واللي ممكن يكون اتعرّف
-              عليه كجهاز موجود وقت مزامنة الأجهزة. من غير السطور دي،
+              عليه كجهاز موجود وقت مزامنة الأجهزة. من غير الخطوة دي،
               الفحص بيروح **لجهاز مكرر** بدل الكانوني.
+
+              🔴 **وده فرق مقصود عن القديم.** القديم في المسار ده
+              كان بيقرا جدول الأسامي المستعارة **خطوة واحدة** وبعدها
+              بيدوّر في جدول الأجهزة مباشرةً. والاتنين مش كفاية:
+
+                • الدمج **مابيعيدش توجيه** الأسامي المستعارة القديمة،
+                  فـ«أ ← ب» اللي اتعمل قبل «ب ← ج» بيفضل بيشاور على
+                  **ب** — وب بقى شاهد قبر
+                • والبحث المباشر في جدول الأجهزة بيلاقي شاهد القبر
+                  ويرجّعه، فالفحص بيتربط **بجهاز ميّت**
+
+              والقديم عنده الإصلاح ده بالظبط (`DeviceReference`)
+              وبيستعمله في بوابة الدفعات — بس مسار الاستقبال ده
+              ماتحدّثش معاه. وتعليق القديم نفسه بيقول: «أي فحص «الجهاز
+              ده موجود؟» لازم يعدّي من هنا، و«موجود» معناها **حيّ** مش
+              «ليه صف»».
             */
-            var alias = await reports.CanonicalForAliasAsync(
-                command.TenantId, dto.DeviceId.Value, ct);
-
-            if (alias is { } canonical) return new DeviceLink(canonical, false);
-
-            if (known.Contains(dto.DeviceId.Value))
-                return new DeviceLink(dto.DeviceId.Value, false);
+            if (resolved.TryGetValue(dto.DeviceId.Value, out var alive))
+                return new DeviceLink(alive, false);
 
             /*
               الفحص بيشاور على جهاز السيرفر ما يعرفوش. مسار الدفعات
