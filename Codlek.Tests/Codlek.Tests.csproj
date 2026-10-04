@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Codlek.Core\Codlek.Core.csproj" />
+    <ProjectReference Include="..\Codlek.Application\Codlek.Application.csproj" />
+    <ProjectReference Include="..\Codlek.Infrastructure\Codlek.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
