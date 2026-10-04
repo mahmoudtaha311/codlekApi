@@ -12,6 +12,11 @@ namespace Codlek.Application.Abstractions;
 /// </summary>
 public static class AuditActions
 {
+    public const string BrandCreated = "brand.created";
+    public const string BrandUpdated = "brand.updated";
+    public const string BrandAliasAdded = "brand.alias_added";
+    public const string BrandAliasRemoved = "brand.alias_removed";
+
     public const string DepartmentCreated = "department.created";
     public const string DepartmentUpdated = "department.updated";
 }

@@ -4,15 +4,6 @@ using System;
 
 namespace Codlek.Core.Text;
 
-/// <summary>ماركة واحدة وأسماؤها البديلة — <b>بيانات، مش جدول</b>.</summary>
-public readonly record struct BrandRule(Guid Id, string Name, IReadOnlyList<string> Aliases);
-
-/// <summary>نتيجة الحل.</summary>
-public readonly record struct BrandResult(Guid? BrandId, string Name, BrandMatch Match)
-{
-    public static BrandResult None(string raw) => new(null, raw, BrandMatch.Unknown);
-}
-
 /// <summary>
 /// توحيد اسم الماركة وحلّه لماركة معروفة — <b>قاعدة نقية</b>.
 ///

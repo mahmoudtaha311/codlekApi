@@ -71,6 +71,7 @@ public static class DependencyInjection
           شركة تانية. المستودعات هنا دوالها بتاخد `tenantId` إجباري.
         */
         services.AddScoped<IAccountRepository, AccountRepository>();
+        services.AddScoped<IBrandRepository, BrandRepository>();
         services.AddScoped<IContainerRepository, ContainerRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 
