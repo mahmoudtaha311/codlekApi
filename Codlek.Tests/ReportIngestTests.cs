@@ -1,5 +1,6 @@
 using Codlek.Application.Contracts.Sync;
 using Codlek.Application.Features.Rack.IngestReports;
+using Codlek.Application.Interfaces;
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Devices;
 using Codlek.Core.Entities;
@@ -21,7 +22,7 @@ namespace Codlek.Tests;
 /// </summary>
 public class ReportIngestTests
 {
-    private sealed class FakeIngest : IReportIngestRepository, IDeviceReferenceRepository
+    private sealed class FakeIngest : IReportIngestRepository, IDeviceReference
     {
         public readonly Dictionary<Guid, Report> Reports = [];
         public readonly HashSet<Guid> Devices = [];
@@ -62,22 +63,30 @@ public class ReportIngestTests
 
         /// <summary>
         /// ⚠️ <b>والمزيّف بيعمل الترجمة كمان</b> — الجهاز الموجود في
-        /// <c>Devices</c> بيبقى «حيّ»، واللي في <c>Aliases</c> بيبقى
-        /// مستعار. سلسلة الدمج ليها فحوصها لوحدها.
+        /// <c>Devices</c> حيّ، واللي في <c>Aliases</c> مستعار. سلسلة الدمج
+        /// الكاملة متقاسة على قاعدة حقيقية في
+        /// <c>ReportIngestRepositoryTests</c>.
         /// </summary>
-        public Task<IReadOnlyDictionary<Guid, DeviceMergeState>> DeviceStatesAsync(
-            Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyDictionary<Guid, DeviceMergeState>>(
-                ids.Where(Devices.Contains).ToDictionary(
-                    id => id,
-                    _ => new DeviceMergeState { Status = DeviceLifecycleStatus.Active }));
+        public Task<Guid?> ResolveAsync(
+            Guid tenantId, Guid deviceId, CancellationToken ct = default) =>
+            Task.FromResult(Resolve(deviceId));
 
-        public Task<IReadOnlyDictionary<Guid, Guid>> AliasTargetsAsync(
-            Guid tenantId, IReadOnlyCollection<Guid> aliasIds,
-            CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(
-                Aliases.Where(p => aliasIds.Contains(p.Key))
-                    .ToDictionary(p => p.Key, p => p.Value));
+        public Task<IReadOnlyDictionary<Guid, Guid>> ResolveManyAsync(
+            Guid tenantId, IReadOnlyCollection<Guid> deviceIds,
+            CancellationToken ct = default)
+        {
+            var map = new Dictionary<Guid, Guid>();
+
+            foreach (var id in deviceIds.Where(i => i != Guid.Empty).Distinct())
+                if (Resolve(id) is { } found) map[id] = found;
+
+            return Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(map);
+        }
+
+        private Guid? Resolve(Guid id) =>
+            Devices.Contains(id) ? id
+            : Aliases.TryGetValue(id, out var target) && Devices.Contains(target) ? target
+            : null;
 
         public Task<IReadOnlyList<Guid>> DevicesByIdentifierAsync(
             Guid t, DeviceIdentifierKind kind, string value,
@@ -136,7 +145,7 @@ public class ReportIngestTests
         return new Harness(
             repo, work,
             new IngestReportsCommandHandler(
-                repo, new DeviceReferenceResolver(repo), work,
+                repo, repo, work,
                 NullLogger<IngestReportsCommandHandler>.Instance),
             Guid.NewGuid(),
             Guid.NewGuid());

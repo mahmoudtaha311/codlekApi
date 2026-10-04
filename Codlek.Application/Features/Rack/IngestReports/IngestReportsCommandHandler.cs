@@ -16,7 +16,7 @@ namespace Codlek.Application.Features.Rack.IngestReports;
 /// <inheritdoc cref="IngestReportsCommand"/>
 public sealed class IngestReportsCommandHandler(
     IReportIngestRepository reports,
-    DeviceReferenceResolver deviceReference,
+    IDeviceReference deviceReference,
     IUnitOfWork unitOfWork,
     ILogger<IngestReportsCommandHandler> log)
     : IRequestHandler<IngestReportsCommand, Result<IngestResult>>

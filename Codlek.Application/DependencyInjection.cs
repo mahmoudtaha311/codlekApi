@@ -45,17 +45,6 @@ public static class DependencyInjection
         */
         services.AddScoped<Interfaces.IRepairTransitions, Features.Repairs.RepairTransitions>();
 
-        /*
-          🔴 **مترجم معرّف الجهاز للكانوني الحيّ.**
-
-          مش مستودع — هو لفّة منطق فوق قرايتين. وبيتسجّل هنا لأن
-          مسار الاستقبال ومسار الدفعات الاتنين بيستعملوه، ولازم
-          يستعملوا **نفس** القاعدة: «موجود» معناها حيّ مش «ليه صف».
-
-          ⚠️ ونسيان السطر ده بيوقّع الإقلاع كله — وده أحسن من
-          إنه يشتغل بنص الترجمة.
-        */
-        services.AddScoped<Features.Rack.IngestReports.DeviceReferenceResolver>();
         services.AddScoped<Features.Rack.SyncDevices.DeviceSyncApplier>();
 
         return services;

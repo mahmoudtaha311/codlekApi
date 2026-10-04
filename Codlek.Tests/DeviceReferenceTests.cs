@@ -1,292 +1,231 @@
-using Codlek.Application.Features.Rack.IngestReports;
-using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Devices;
+using Codlek.Core.Entities;
 using Codlek.Core.Enums;
+using Codlek.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Codlek.Tests;
 
-/// <summary>
-/// ترجمة معرّف الجهاز للكانوني <b>الحيّ</b>.
-///
-/// <para>🔴 <b>والملف ده موجود عشان حادثة إنتاج.</b> راكة جديدة
-/// بتشوف لاب لأول مرة بتولّد له معرّف محلي. السيرفر بيطابق مراسيه
-/// ويلاقيه جهاز موجود بمعرّف تاني، فبيعمل اسم مستعار وبيرجّع
-/// «اتقبل» — وده الصح. بس الدمج <b>مابيمسحش</b> صف الجهاز المكرر:
-/// بيسيبه شاهد قبر. فمعرّف مدموج بيتلاقى في جدول الأجهزة وبيرجع
-/// <b>شاهد القبر</b>، والنتيجة شغل بيتربط بجهاز ميّت.</para>
-///
-/// <para>⚠️ <b>والدمج مابيعيدش توجيه الأسامي المستعارة القديمة</b> —
-/// «أ ← ب» اللي اتعمل قبل «ب ← ج» بيفضل بيشاور على ب، وب بقى شاهد
-/// قبر. عشان كده التتبّع بيلفّ.</para>
-/// </summary>
-public class DeviceReferenceTests
+/// <summary>قاعدة فحوص ترجمة معرّف الجهاز.</summary>
+public sealed class DeviceReferenceDbFixture : SqlServerDbFixture
 {
-    private sealed class FakeDevices : IDeviceReferenceRepository
+    protected override string DatabaseName => "codlek_device_ref_test";
+}
+
+/// <summary>
+/// ترجمة معرّف الجهاز للكانوني <b>الحيّ</b> — على قاعدة حقيقية.
+///
+/// <para>🔴 <b>والتنفيذ ده كان من غير ولا فحص.</b> اتنقل في المرحلة ٤
+/// ومسار الحركات بيعتمد عليه، وبعدين اتكتبت نسخة تانية منه في مسار
+/// الاستقبال <b>من غير ما حد ياخد باله إنه موجود</b>. نسختين لنفس
+/// القاعدة هو بالظبط نوع العطل اللي القديم موثّقه: البوابة كانت بتدوّر
+/// في جدول الأجهزة بس والاستقبال بيترجم صح، فالفحص كان بيترفض «الجهاز
+/// لسه ماوصلش» وهو واصل — للأبد. النسخة التانية اتشالت، والفحوص بقت
+/// هنا على الوحيدة.</para>
+///
+/// <para>🔴 <b>والقاعدة:</b> «موجود» معناها <b>حيّ</b> مش «ليه صف».
+/// الدمج مابيمسحش صف المكرر (بيسيبه شاهد قبر) ومابيعيدش توجيه الأسامي
+/// المستعارة القديمة — فـ«أ ← ب» اللي اتعمل قبل «ب ← ج» بيفضل بيشاور
+/// على شاهد قبر.</para>
+/// </summary>
+public class DeviceReferenceTests(DeviceReferenceDbFixture fixture)
+    : IClassFixture<DeviceReferenceDbFixture>
+{
+    private static Guid NewTenant(AppDbContext db)
     {
-        public readonly Dictionary<Guid, DeviceMergeState> States = [];
-        public readonly Dictionary<Guid, Guid> Aliases = [];
+        var tenant = new Tenant { Name = "ورشة " + Guid.NewGuid().ToString("N")[..6] };
+        db.Tenants.Add(tenant);
+        return tenant.Id;
+    }
 
-        /// <summary>⚠️ عدّاد اللفّات — الفحص بيقيس إن الشايع لفّة واحدة.</summary>
-        public int Rounds;
-
-        /// <summary>
-        /// ⚠️ <b>المعرّفات اللي اتسأل عنها في جدول الأسامي
-        /// المستعارة.</b>
-        ///
-        /// <para>🔴 والعدّاد ده اتضاف بعد تحوير نجا: الاستعلام
-        /// المفروض يسأل على <b>اللي مالوش صف جهاز بس</b>. سؤاله على
-        /// الكل بيدّي نفس الإجابة (فرع الصف بيكسب) — فالفحص لازم
-        /// يقيس <b>اللي اتسأل عنه</b> مش بس النتيجة.</para>
-        /// </summary>
-        public readonly List<Guid> AliasProbes = [];
-
-        public Task<IReadOnlyDictionary<Guid, DeviceMergeState>> DeviceStatesAsync(
-            Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    private static Device NewDevice(AppDbContext db, Guid tenantId)
+    {
+        var device = new Device
         {
-            Rounds++;
+            TenantId = tenantId,
+            PublicCode = "LP-" + Random.Shared.Next(10_000_000, 99_999_999),
+        };
 
-            return Task.FromResult<IReadOnlyDictionary<Guid, DeviceMergeState>>(
-                States.Where(p => ids.Contains(p.Key))
-                    .ToDictionary(p => p.Key, p => p.Value));
-        }
+        db.Devices.Add(device);
+        return device;
+    }
 
-        public Task<IReadOnlyDictionary<Guid, Guid>> AliasTargetsAsync(
-            Guid tenantId, IReadOnlyCollection<Guid> aliasIds,
-            CancellationToken ct = default)
+    private static void Merge(Device dead, Guid into)
+    {
+        dead.Status = DeviceLifecycleStatus.Merged;
+        dead.MergedIntoDeviceId = into;
+    }
+
+    private static void Alias(AppDbContext db, Guid tenantId, Guid from, Guid to) =>
+        db.DeviceAliases.Add(new DeviceAlias
         {
-            AliasProbes.AddRange(aliasIds);
+            TenantId = tenantId,
+            AliasDeviceId = from,
+            CanonicalDeviceId = to,
+        });
 
-            return Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(
-                Aliases.Where(p => aliasIds.Contains(p.Key))
-                    .ToDictionary(p => p.Key, p => p.Value));
-        }
-
-        public void Alive(Guid id) =>
-            States[id] = new DeviceMergeState { Status = DeviceLifecycleStatus.Active };
-
-        public void Tombstone(Guid id, Guid into) =>
-            States[id] = new DeviceMergeState
-            {
-                Status = DeviceLifecycleStatus.Merged,
-                MergedIntoDeviceId = into,
-            };
-    }
-
-    private static (DeviceReferenceResolver Resolver, FakeDevices Repo) Build()
-    {
-        var repo = new FakeDevices();
-        return (new DeviceReferenceResolver(repo), repo);
-    }
-
-    private static readonly Guid Tenant = Guid.NewGuid();
+    private DeviceReference Resolver(AppDbContext db) =>
+        new(db, NullLogger<DeviceReference>.Instance);
 
     // =================================================================
-    //  الحالة الشايعة
+    //  الدالة النقية
     // =================================================================
 
+    /// <summary>
+    /// ⚠️ <b>التلات شروط مع بعض.</b> صف <c>Merged</c> من غير هدف (أو
+    /// بهدف فاضي) = بيانات ناقصة، واتباعها بيوصل لـ<c>Guid.Empty</c>
+    /// ويرجّع «مش موجود». فبنوقف عنده ونعتبره الكانوني — أهون من حركة
+    /// بتترفض.
+    /// </summary>
     [Fact]
-    public async Task A_live_device_resolves_to_itself_in_one_round()
+    public void A_tombstone_needs_all_three_conditions()
     {
-        var (resolver, repo) = Build();
-        var device = Guid.NewGuid();
+        var target = Guid.NewGuid();
 
-        repo.Alive(device);
+        Assert.Equal(target, DeviceMergeWalk.MergedInto(DeviceLifecycleStatus.Merged, target));
 
-        Assert.Equal(device, await resolver.ResolveAsync(Tenant, device));
+        Assert.Null(DeviceMergeWalk.MergedInto(DeviceLifecycleStatus.Merged, null));
+        Assert.Null(DeviceMergeWalk.MergedInto(DeviceLifecycleStatus.Merged, Guid.Empty));
 
-        // ⚠️ لفّة واحدة — الشايع مالوش لازمة رحلة تانية.
-        Assert.Equal(1, repo.Rounds);
+        // ⚠️ وهدف مكتوب على جهاز مش مدموج = مش شاهد قبر.
+        Assert.Null(DeviceMergeWalk.MergedInto(DeviceLifecycleStatus.Active, target));
+        Assert.Null(DeviceMergeWalk.MergedInto(DeviceLifecycleStatus.DuplicateSuspected, target));
     }
 
     [Fact]
-    public async Task An_id_the_server_never_saw_resolves_to_nothing()
+    public void An_empty_id_is_not_askable_and_a_revisit_is_a_loop()
     {
-        var (resolver, _) = Build();
+        Assert.False(DeviceMergeWalk.IsAskable(Guid.Empty));
+        Assert.True(DeviceMergeWalk.IsAskable(Guid.NewGuid()));
 
-        Assert.Null(await resolver.ResolveAsync(Tenant, Guid.NewGuid()));
-    }
+        var seen = new HashSet<Guid>();
+        var id = Guid.NewGuid();
 
-    [Fact]
-    public async Task An_empty_id_is_never_asked_about()
-    {
-        var (resolver, repo) = Build();
-
-        Assert.Null(await resolver.ResolveAsync(Tenant, Guid.Empty));
-        Assert.Equal(0, repo.Rounds);
+        Assert.True(DeviceMergeWalk.CanVisit(seen, id));
+        Assert.False(DeviceMergeWalk.CanVisit(seen, id));
     }
 
     // =================================================================
-    //  الاسم المستعار
+    //  معرّف واحد
     // =================================================================
 
     [Fact]
-    public async Task An_alias_resolves_to_its_canonical()
+    public async Task A_live_device_resolves_to_itself()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+        var device = NewDevice(db, tenant);
 
-        var local = Guid.NewGuid();
-        var canonical = Guid.NewGuid();
+        await db.SaveChangesAsync();
 
-        repo.Aliases[local] = canonical;
-        repo.Alive(canonical);
+        Assert.Equal(device.Id, await Resolver(db).ResolveAsync(tenant, device.Id));
+    }
 
-        Assert.Equal(canonical, await resolver.ResolveAsync(Tenant, local));
+    [Fact]
+    public async Task An_unknown_or_empty_id_resolves_to_nothing()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        await db.SaveChangesAsync();
+
+        Assert.Null(await Resolver(db).ResolveAsync(tenant, Guid.NewGuid()));
+        Assert.Null(await Resolver(db).ResolveAsync(tenant, Guid.Empty));
     }
 
     /// <summary>
-    /// 🔴 <b>وشاهد القبر مش نهاية الطريق.</b>
-    ///
-    /// <para>«موجود» معناها <b>حيّ</b> مش «ليه صف» — والصف اللي
-    /// <c>Merged</c> لازم يوصّلنا للي بعده.</para>
+    /// 🔴 <b>وسلسلة دمج من تلات خطوات بتوصل للحيّ.</b>
     /// </summary>
     [Fact]
-    public async Task A_tombstone_keeps_going_to_the_living_device()
+    public async Task A_three_hop_merge_chain_reaches_the_living_device()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
 
-        var dead = Guid.NewGuid();
-        var alive = Guid.NewGuid();
+        var a = NewDevice(db, tenant);
+        var b = NewDevice(db, tenant);
+        var c = NewDevice(db, tenant);
+        var d = NewDevice(db, tenant);
 
-        repo.Tombstone(dead, alive);
-        repo.Alive(alive);
+        await db.SaveChangesAsync();
 
-        Assert.Equal(alive, await resolver.ResolveAsync(Tenant, dead));
+        Merge(a, b.Id);
+        Merge(b, c.Id);
+        Merge(c, d.Id);
+
+        await db.SaveChangesAsync();
+
+        Assert.Equal(d.Id, await Resolver(db).ResolveAsync(tenant, a.Id));
     }
-
-    /// <summary>
-    /// 🔴 <b>والسلسلة الكاملة: اسم مستعار ← شاهد قبر ← حيّ.</b>
-    ///
-    /// <para>ودي الحالة اللي كانت بتقع: «أ ← ب» اتعمل، وبعدين ب اتدمج
-    /// في ج. الاسم المستعار لسه بيشاور على ب، وب شاهد قبر — فلولا
-    /// اللفّة، الشغل كان بيتربط <b>بجهاز ميّت</b>.</para>
-    /// </summary>
-    [Fact]
-    public async Task An_alias_onto_a_tombstone_still_finds_the_living_device()
-    {
-        var (resolver, repo) = Build();
-
-        var local = Guid.NewGuid();
-        var merged = Guid.NewGuid();
-        var canonical = Guid.NewGuid();
-
-        repo.Aliases[local] = merged;
-        repo.Tombstone(merged, canonical);
-        repo.Alive(canonical);
-
-        Assert.Equal(canonical, await resolver.ResolveAsync(Tenant, local));
-    }
-
-    /// <summary>⚠️ وسلسلة دمج من تلات خطوات.</summary>
-    [Fact]
-    public async Task A_three_hop_merge_chain_resolves()
-    {
-        var (resolver, repo) = Build();
-
-        var a = Guid.NewGuid();
-        var b = Guid.NewGuid();
-        var c = Guid.NewGuid();
-        var d = Guid.NewGuid();
-
-        repo.Tombstone(a, b);
-        repo.Tombstone(b, c);
-        repo.Tombstone(c, d);
-        repo.Alive(d);
-
-        Assert.Equal(d, await resolver.ResolveAsync(Tenant, a));
-    }
-
-    // =================================================================
-    //  البيانات البايظة
-    // =================================================================
 
     /// <summary>
     /// 🔴 <b>والحلقة المقفولة بترجع «مش معروف» — مش بتعلّق
     /// الطلب.</b>
-    ///
-    /// <para>السقف موجود عشان بيانات بايظة <b>متعلّقش الطلب
-    /// للأبد</b>.</para>
     /// </summary>
     [Fact]
-    public async Task A_closed_loop_gives_up_instead_of_spinning()
+    public async Task A_closed_loop_gives_up()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
 
-        var a = Guid.NewGuid();
-        var b = Guid.NewGuid();
+        var a = NewDevice(db, tenant);
+        var b = NewDevice(db, tenant);
 
-        repo.Tombstone(a, b);
-        repo.Tombstone(b, a);
+        await db.SaveChangesAsync();
 
-        Assert.Null(await resolver.ResolveAsync(Tenant, a));
+        Merge(a, b.Id);
+        Merge(b, a.Id);
 
-        /*
-          🔴 **ووقف بدري — مش لما السقف يخلص.**
+        await db.SaveChangesAsync();
 
-          السقف لوحده بيمنع اللفّ للأبد، فكشف الحلقة **زيادة** من
-          ناحية النتيجة. بس هو اللي بيوفّر الرحلات: من غيره، كل
-          سلسلة بايظة بتاكل عشر رحلات على القاعدة بدل اتنين.
+        Assert.Null(await Resolver(db).ResolveAsync(tenant, a.Id));
 
-          ⚠️ وتحوير شال الكشف **ونجا** من فحص كان بيقول
-          `<= MaxHops` — وده شرط بيتحقق في الحالتين.
-        */
-        Assert.True(
-            repo.Rounds <= 3,
-            $"كشف الحلقة مابيوفّرش رحلات: {repo.Rounds} لفّة.");
+        var map = await Resolver(db).ResolveManyAsync(tenant, [a.Id]);
+        Assert.Empty(map);
     }
 
-    /// <summary>
-    /// ⚠️ <b>والسلسلة الأطول من السقف بترجع «مش معروف».</b>
-    /// </summary>
+    /// <summary>⚠️ والسلسلة الأطول من السقف بترجع «مش معروف».</summary>
     [Fact]
     public async Task A_chain_longer_than_the_cap_gives_up()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
 
-        var ids = Enumerable.Range(0, DeviceMergeChain.MaxHops + 3)
-            .Select(_ => Guid.NewGuid())
+        var chain = Enumerable.Range(0, DeviceMergeWalk.MaxHops + 2)
+            .Select(_ => NewDevice(db, tenant))
             .ToList();
 
-        for (int i = 0; i < ids.Count - 1; i++) repo.Tombstone(ids[i], ids[i + 1]);
+        await db.SaveChangesAsync();
 
-        repo.Alive(ids[^1]);
+        for (int i = 0; i < chain.Count - 1; i++) Merge(chain[i], chain[i + 1].Id);
 
-        Assert.Null(await resolver.ResolveAsync(Tenant, ids[0]));
+        await db.SaveChangesAsync();
+
+        Assert.Null(await Resolver(db).ResolveAsync(tenant, chain[0].Id));
+
+        // ⚠️ وحراسة: من نص السلسلة (أقصر من السقف) بيوصل.
+        Assert.Equal(
+            chain[^1].Id,
+            await Resolver(db).ResolveAsync(tenant, chain[^3].Id));
     }
 
-    /// <summary>
-    /// ⚠️ <b>وشاهد قبر بيشاور على لا حاجة بيرجع «مش معروف».</b>
-    /// </summary>
+    /// <summary>⚠️ وشاهد قبر بيشاور على لا حاجة = «مش معروف».</summary>
     [Fact]
     public async Task A_tombstone_pointing_nowhere_is_unknown()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+        var dead = NewDevice(db, tenant);
 
-        var dead = Guid.NewGuid();
-        var gone = Guid.NewGuid();
+        await db.SaveChangesAsync();
 
-        repo.Tombstone(dead, gone);
+        Merge(dead, Guid.NewGuid());
 
-        Assert.Null(await resolver.ResolveAsync(Tenant, dead));
-    }
+        await db.SaveChangesAsync();
 
-    /// <summary>
-    /// ⚠️ <b>و<c>Merged</c> من غير معرّف الهدف مش شاهد قبر</b> —
-    /// بيانات ناقصة، فالصف نفسه هو الإجابة بدل ما نلف على فاضي.
-    /// </summary>
-    [Fact]
-    public async Task Merged_without_a_target_is_not_a_tombstone()
-    {
-        var (resolver, repo) = Build();
-
-        var device = Guid.NewGuid();
-
-        repo.States[device] = new DeviceMergeState
-        {
-            Status = DeviceLifecycleStatus.Merged,
-            MergedIntoDeviceId = null,
-        };
-
-        Assert.Equal(device, await resolver.ResolveAsync(Tenant, device));
+        Assert.Null(await Resolver(db).ResolveAsync(tenant, dead.Id));
     }
 
     // =================================================================
@@ -294,135 +233,148 @@ public class DeviceReferenceTests
     // =================================================================
 
     /// <summary>
-    /// ⚠️ <b>واللفّة بتحلّ طبقة لكل المعرّفات مع بعض</b> — مش معرّف
-    /// معرّف.
+    /// 🔴 <b>دفعة مخلوطة: حيّ، ومستعار، وشاهد قبر، ومجهول.</b> والمجهول
+    /// <b>مابيظهرش في الخريطة خالص</b> — «السيرفر عمره ما شافه» مش
+    /// «شافه وماعرفش يترجمه».
     /// </summary>
     [Fact]
-    public async Task A_mixed_batch_resolves_in_as_few_rounds_as_the_longest_chain()
+    public async Task A_mixed_batch_resolves_each_kind_correctly()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
 
-        var alive = Guid.NewGuid();
+        var alive = NewDevice(db, tenant);
+        var canonical = NewDevice(db, tenant);
+        var dead = NewDevice(db, tenant);
+
+        await db.SaveChangesAsync();
+
         var local = Guid.NewGuid();
-        var canonical = Guid.NewGuid();
-        var dead = Guid.NewGuid();
+        Alias(db, tenant, local, canonical.Id);
+        Merge(dead, canonical.Id);
+
+        await db.SaveChangesAsync();
+
         var unknown = Guid.NewGuid();
 
-        repo.Alive(alive);
-        repo.Aliases[local] = canonical;
-        repo.Alive(canonical);
-        repo.Tombstone(dead, canonical);
+        var map = await Resolver(db).ResolveManyAsync(
+            tenant, [alive.Id, local, dead.Id, unknown]);
 
-        var map = await resolver.ResolveManyAsync(
-            Tenant, [alive, local, dead, unknown]);
-
-        Assert.Equal(alive, map[alive]);
-        Assert.Equal(canonical, map[local]);
-        Assert.Equal(canonical, map[dead]);
-
-        // 🔴 والمجهول **مابيظهرش في الخريطة خالص** — «السيرفر عمره
-        //    ما شافه» مش «شافه وماعرفش يترجمه».
+        Assert.Equal(alive.Id, map[alive.Id]);
+        Assert.Equal(canonical.Id, map[local]);
+        Assert.Equal(canonical.Id, map[dead.Id]);
         Assert.False(map.ContainsKey(unknown));
+    }
 
-        // ⚠️ أطول سلسلة خطوتين، فلفّتين كفاية.
-        Assert.True(repo.Rounds <= 3, $"لفّات كتير: {repo.Rounds}");
+    /// <summary>⚠️ وحلقة في سلسلة واحدة مابتوقّفش الباقي.</summary>
+    [Fact]
+    public async Task A_broken_chain_does_not_poison_the_batch()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var a = NewDevice(db, tenant);
+        var b = NewDevice(db, tenant);
+        var good = NewDevice(db, tenant);
+
+        await db.SaveChangesAsync();
+
+        Merge(a, b.Id);
+        Merge(b, a.Id);
+
+        await db.SaveChangesAsync();
+
+        var map = await Resolver(db).ResolveManyAsync(tenant, [a.Id, good.Id]);
+
+        Assert.Equal(good.Id, map[good.Id]);
+        Assert.False(map.ContainsKey(a.Id));
+    }
+
+    /// <summary>
+    /// 🔴 <b>والحالة الشايعة استعلام واحد — ومن غير ما يلمس جدول
+    /// الأسامي المستعارة.</b>
+    ///
+    /// <para>دي بتشتغل على <b>كل صف في كل دفعة</b>، فالرحلة الزيادة مش
+    /// تفصيلة. ومقاسة من نص الـSQL نفسه.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_batch_of_live_devices_is_one_query_and_never_asks_aliases()
+    {
+        var sql = new List<string>();
+
+        using var db = new AppDbContext(
+            new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlServer(fixture.ConnectionString)
+                .LogTo(sql.Add, [DbLoggerCategory.Database.Command.Name], LogLevel.Information)
+                .Options);
+
+        var tenant = NewTenant(db);
+
+        var ids = Enumerable.Range(0, 5).Select(_ => NewDevice(db, tenant).Id).ToList();
+
+        await db.SaveChangesAsync();
+
+        sql.Clear();
+
+        var map = await Resolver(db).ResolveManyAsync(tenant, ids);
+
+        Assert.Equal(5, map.Count);
+
+        var selects = sql.Where(l => l.Contains("SELECT", StringComparison.Ordinal)).ToList();
+
+        Assert.Single(selects);
+        Assert.DoesNotContain(sql, l => l.Contains("[DeviceAliases]", StringComparison.Ordinal));
     }
 
     /// <summary>⚠️ والمعرّف الفاضي والمتكرر بيتشالوا قبل أي استعلام.</summary>
     [Fact]
     public async Task Empty_and_duplicate_ids_are_dropped_first()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+        var device = NewDevice(db, tenant);
 
-        var device = Guid.NewGuid();
-        repo.Alive(device);
+        await db.SaveChangesAsync();
 
-        var map = await resolver.ResolveManyAsync(
-            Tenant, [device, device, Guid.Empty, device]);
+        var map = await Resolver(db).ResolveManyAsync(
+            tenant, [device.Id, device.Id, Guid.Empty, device.Id]);
 
         Assert.Single(map);
-        Assert.Equal(1, repo.Rounds);
-    }
 
-    [Fact]
-    public async Task An_empty_request_asks_nothing()
-    {
-        var (resolver, repo) = Build();
-
-        Assert.Empty(await resolver.ResolveManyAsync(Tenant, []));
-        Assert.Equal(0, repo.Rounds);
+        Assert.Empty(await Resolver(db).ResolveManyAsync(tenant, [Guid.Empty]));
     }
 
     /// <summary>
-    /// ⚠️ <b>وحلقة في سلسلة واحدة مابتوقّفش الباقي.</b> كل معرّف
-    /// بيتتبّع سلسلته لوحده.
+    /// 🔴 <b>والمسارين — الواحد والجملة — بيدّوا نفس الإجابة.</b>
+    /// نسختين بيختلفوا هو بالظبط العطل اللي الملف ده اتعمل عشانه.
     /// </summary>
     [Fact]
-    public async Task A_broken_chain_does_not_poison_the_batch()
+    public async Task One_and_many_agree_on_every_shape()
     {
-        var (resolver, repo) = Build();
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
 
-        var loopA = Guid.NewGuid();
-        var loopB = Guid.NewGuid();
-        var good = Guid.NewGuid();
+        var alive = NewDevice(db, tenant);
+        var mid = NewDevice(db, tenant);
+        var end = NewDevice(db, tenant);
 
-        repo.Tombstone(loopA, loopB);
-        repo.Tombstone(loopB, loopA);
-        repo.Alive(good);
+        await db.SaveChangesAsync();
 
-        var map = await resolver.ResolveManyAsync(Tenant, [loopA, good]);
-
-        Assert.Equal(good, map[good]);
-        Assert.False(map.ContainsKey(loopA));
-    }
-
-    /// <summary>
-    /// 🔴 <b>وجدول الأسامي المستعارة بيتسأل على اللي <u>مالوش صف
-    /// جهاز</u> بس.</b>
-    ///
-    /// <para>الجهاز الحيّ خلص — سؤاله في جدول تاني رحلة على الفاضي.
-    /// وده بيشتغل على <b>كل صف في كل دفعة</b>، فالرحلة الزيادة مش
-    /// تفصيلة.</para>
-    ///
-    /// <para>⚠️ وتحوير خلّى الاستعلام يسأل على الكل <b>ونجا</b>، لأن
-    /// الإجابة بتفضل نفسها (فرع الصف بيكسب). فالفحص بيقيس
-    /// <b>اللي اتسأل عنه</b>.</para>
-    /// </summary>
-    [Fact]
-    public async Task Only_ids_without_a_device_row_are_looked_up_as_aliases()
-    {
-        var (resolver, repo) = Build();
-
-        var alive = Guid.NewGuid();
         var local = Guid.NewGuid();
-        var canonical = Guid.NewGuid();
+        Alias(db, tenant, local, mid.Id);
+        Merge(mid, end.Id);
 
-        repo.Alive(alive);
-        repo.Aliases[local] = canonical;
-        repo.Alive(canonical);
+        await db.SaveChangesAsync();
 
-        await resolver.ResolveManyAsync(Tenant, [alive, local]);
+        Guid[] probes = [alive.Id, local, mid.Id, Guid.NewGuid()];
 
-        Assert.Contains(local, repo.AliasProbes);
-        Assert.DoesNotContain(alive, repo.AliasProbes);
-    }
+        var many = await Resolver(db).ResolveManyAsync(tenant, probes);
 
-    /// <summary>
-    /// ⚠️ <b>وكله أجهزة حيّة = ولا سؤال واحد على الأسامي
-    /// المستعارة.</b>
-    /// </summary>
-    [Fact]
-    public async Task A_batch_of_live_devices_never_touches_the_alias_table()
-    {
-        var (resolver, repo) = Build();
+        foreach (var id in probes)
+        {
+            var one = await Resolver(db).ResolveAsync(tenant, id);
 
-        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
-
-        foreach (var id in ids) repo.Alive(id);
-
-        await resolver.ResolveManyAsync(Tenant, ids);
-
-        Assert.Empty(repo.AliasProbes);
-        Assert.Equal(1, repo.Rounds);
+            Assert.Equal(one, many.TryGetValue(id, out var m) ? m : null);
+        }
     }
 }

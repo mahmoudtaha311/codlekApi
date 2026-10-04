@@ -696,8 +696,7 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
 
         using var fresh = fixture.Create();
 
-        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
-            new DeviceReferenceRepository(fresh));
+        var resolver = new Codlek.Infrastructure.Data.DeviceReference(fresh, Microsoft.Extensions.Logging.Abstractions.NullLogger<Codlek.Infrastructure.Data.DeviceReference>.Instance);
 
         Assert.Equal(canonical.Id, await resolver.ResolveAsync(tenant, local));
 
@@ -718,8 +717,7 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
 
         var unknown = Guid.NewGuid();
 
-        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
-            new DeviceReferenceRepository(db));
+        var resolver = new Codlek.Infrastructure.Data.DeviceReference(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<Codlek.Infrastructure.Data.DeviceReference>.Instance);
 
         var map = await resolver.ResolveManyAsync(tenant, [device.Id, unknown]);
 
@@ -742,8 +740,7 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
 
         await db.SaveChangesAsync();
 
-        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
-            new DeviceReferenceRepository(db));
+        var resolver = new Codlek.Infrastructure.Data.DeviceReference(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<Codlek.Infrastructure.Data.DeviceReference>.Instance);
 
         Assert.Null(await resolver.ResolveAsync(mine, hers.Id));
     }
@@ -784,8 +781,7 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
 
         await db.SaveChangesAsync();
 
-        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
-            new DeviceReferenceRepository(db));
+        var resolver = new Codlek.Infrastructure.Data.DeviceReference(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<Codlek.Infrastructure.Data.DeviceReference>.Instance);
 
         // 🔴 ورشتي مابتشوفهوش.
         Assert.Null(await resolver.ResolveAsync(mine, local));
@@ -820,8 +816,7 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
 
         using var fresh = fixture.Create();
 
-        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
-            new DeviceReferenceRepository(fresh));
+        var resolver = new Codlek.Infrastructure.Data.DeviceReference(fresh, Microsoft.Extensions.Logging.Abstractions.NullLogger<Codlek.Infrastructure.Data.DeviceReference>.Instance);
 
         Assert.Equal(device.Id, await resolver.ResolveAsync(tenant, device.Id));
     }
@@ -847,8 +842,7 @@ public class ReportIngestRepositoryTests(ReportIngestDbFixture fixture)
 
         using var fresh = fixture.Create();
 
-        var resolver = new Application.Features.Rack.IngestReports.DeviceReferenceResolver(
-            new DeviceReferenceRepository(fresh));
+        var resolver = new Codlek.Infrastructure.Data.DeviceReference(fresh, Microsoft.Extensions.Logging.Abstractions.NullLogger<Codlek.Infrastructure.Data.DeviceReference>.Instance);
 
         Assert.Equal(device.Id, await resolver.ResolveAsync(tenant, device.Id));
     }
