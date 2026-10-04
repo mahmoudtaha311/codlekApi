@@ -344,6 +344,12 @@ public sealed class DeviceSyncApplier(
 
         string raw = (dto.ContainerCode ?? "").Trim();
 
+        /*
+          ⚠️ **الرجوع ده بدري بس — مش حارس.** تحوير شالّه والفحوص كلها
+          عدّت، لأن الرمز الفاضي بيطلع مفتاح فاضي وفحص المفتاح تحت
+          بيوقفه. سايبينه لأنه بيوفّر التطبيع على كل جهاز من راكة قديمة
+          (وهي بتبعت الخانة دي فاضية دايماً).
+        */
         if (raw.Length == 0) return;
 
         raw = TextClip.To(raw, ContainerCode.MaxCodeLength);

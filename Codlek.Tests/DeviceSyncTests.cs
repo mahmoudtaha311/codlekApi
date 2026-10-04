@@ -1004,4 +1004,177 @@ public class DeviceSyncTests
 
         Assert.Equal(DeviceLifecycleStatus.Active, h.Repo.Devices[0].Status);
     }
+
+    // =================================================================
+    //  فحوص اتضافت بعد تحويرات نجت
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>و«أول ظهور» مابيتقدّمش لقدّام — بس بيرجع لورا.</b>
+    ///
+    /// <para>⚠️ الفحص اللي فوق كان بيبعت أول ظهور <b>أقدم</b> بس، فشيل
+    /// الشرط خالص (الكتابة على طول) كان بيدّي نفس النتيجة — والتحوير
+    /// <b>نجا</b>. هنا الجايّ <b>أحدث</b> من المتخزّن، والمتخزّن لازم
+    /// يفضل: الجهاز أقدم من اللي الراكة دي فاكراه.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_newer_first_seen_never_overwrites_an_older_one()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+
+        var device = Existing(h, id);
+        var original = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        device.FirstSeenAtUtc = original;
+
+        h.Repo.Touched = true;
+
+        var dto = Payload(id: id);
+        dto.FirstSeenAtUtc = new DateTime(2026, 9, 25, 0, 0, 0);
+
+        await Apply(h, dto);
+
+        Assert.Equal(original, h.Repo.Devices[0].FirstSeenAtUtc);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>وأول ظهور فاضي (<c>default</c>) مابيمسحش القيمة.</b> راكة
+    /// قديمة مابتبعتش الخانة دي، والقيمة الافتراضية «سنة ١» كانت هتبقى
+    /// «أقدم» من أي تاريخ وتكسب.
+    /// </summary>
+    [Fact]
+    public async Task A_missing_first_seen_never_wins_as_the_oldest()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+
+        var device = Existing(h, id);
+        var original = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        device.FirstSeenAtUtc = original;
+
+        h.Repo.Touched = true;
+
+        var dto = Payload(id: id);
+        dto.FirstSeenAtUtc = default;
+
+        await Apply(h, dto);
+
+        Assert.Equal(original, h.Repo.Devices[0].FirstSeenAtUtc);
+    }
+
+    /// <summary>
+    /// 🔴 <b>و«آخر ظهور» المرساة مابيرجعش لورا.</b>
+    ///
+    /// <para>والشرط ده مش تجميل: هو اللي بيمنع الصف يبان «متغيّر» في
+    /// كل مزامنة — حمولة بنفس الوقت أو أقدم مابتلمسش حاجة، فالجهاز
+    /// بيرجع «زي ما هو» صح. ⚠️ ومكانش عليه فحص خالص — التحوير نجا.</para>
+    /// </summary>
+    [Fact]
+    public async Task An_anchor_last_seen_never_moves_backward()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+
+        var device = Existing(h, id);
+        var recent = new DateTime(2026, 10, 4, 0, 0, 0, DateTimeKind.Utc);
+
+        device.Identifiers.Add(new DeviceIdentifierRow
+        {
+            TenantId = h.Tenant,
+            DeviceId = id,
+            Kind = DeviceIdentifierKind.BiosSerial,
+            RawValue = "abc12345",
+            NormalizedValue = "ABC12345",
+            IsActive = true,
+            LastSeenAtUtc = recent,
+        });
+
+        h.Repo.Touched = true;
+
+        var dto = Payload(id: id, bios: "abc12345");
+        dto.Identifiers[0].LastSeenAtUtc = new DateTime(2026, 9, 1, 0, 0, 0);
+
+        await Apply(h, dto);
+
+        var anchor = h.Repo.Devices[0].Identifiers
+            .Single(i => i.Kind == DeviceIdentifierKind.BiosSerial);
+
+        Assert.Equal(recent, anchor.LastSeenAtUtc);
+    }
+
+    /// <summary>
+    /// 🔴 <b>والمرساة المتقاعدة مش دليل تكرار.</b>
+    ///
+    /// <para>مرساة اتلغت (بوردة اتغيّرت، والقديمة اتعلّمت مش نشطة) تاريخ
+    /// مش هوية. لو داخلة في البحث عن التوائم، جهاز اتصلّحت بوردته
+    /// بيتعلّم «مشكوك إنه مكرر» مع اللاب اللي البوردة القديمة راحتله.
+    /// ⚠️ والتحوير اللي شال الشرط نجا — مكانش فيه فحص.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_retired_anchor_is_not_evidence_of_a_twin()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+        var other = Guid.NewGuid();
+
+        var device = Existing(h, id, code: "LP-00000001");
+        Existing(h, other, code: "LP-00000002");
+
+        device.Identifiers.Add(new DeviceIdentifierRow
+        {
+            TenantId = h.Tenant,
+            DeviceId = id,
+            Kind = DeviceIdentifierKind.BoardSerial,
+            RawValue = "old-board",
+            NormalizedValue = "OLD-BOARD",
+            IsActive = false,
+            SupersededReason = "البوردة اتغيّرت",
+        });
+
+        // الجهاز التاني شايل البوردة القديمة دلوقتي.
+        h.Repo.Twins["OLD-BOARD"] = [other];
+
+        h.Repo.Touched = true;
+
+        await Apply(h, Payload(id: id, code: "LP-00000001"));
+
+        Assert.Equal(DeviceLifecycleStatus.Active, h.Repo.Devices.Single(d => d.Id == id).Status);
+        Assert.Equal(DeviceLifecycleStatus.Active, h.Repo.Devices.Single(d => d.Id == other).Status);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والكود اللي رجع للاب بعد ما اتوقف بيرجع نشط.</b> لاب اتعاد
+    /// ترقيمه وبعدين رجعوا عن القرار ولزقوا الاستيكر القديم تاني.
+    /// </summary>
+    [Fact]
+    public async Task A_code_that_comes_back_is_reactivated()
+    {
+        var h = Build();
+        var id = Guid.NewGuid();
+
+        var device = Existing(h, id, code: "LP-00000009");
+
+        device.Identifiers.Add(new DeviceIdentifierRow
+        {
+            TenantId = h.Tenant,
+            DeviceId = id,
+            Kind = DeviceIdentifierKind.CompanyCode,
+            RawValue = "LP-00000001",
+            NormalizedValue = Codlek.Core.Text.ArabicText.Normalize("LP-00000001"),
+            IsActive = false,
+            SupersededAtUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+
+        h.Repo.Touched = true;
+
+        await Apply(h, Payload(id: id, code: "LP-00000001"));
+
+        var anchor = h.Repo.Devices[0].Identifiers.Single(
+            i => i.Kind == DeviceIdentifierKind.CompanyCode && i.RawValue == "LP-00000001");
+
+        Assert.True(anchor.IsActive);
+        Assert.Null(anchor.SupersededAtUtc);
+    }
 }
