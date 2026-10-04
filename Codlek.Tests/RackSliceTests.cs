@@ -39,6 +39,10 @@ public class RackSliceTests
             Hashed.Add(code);
             return ("hash:" + code, "salt:" + Hashed.Count);
         }
+
+        /// <summary>⚠️ نفس اتفاق المصفّف المزيّف: البصمة فيها الكود.</summary>
+        public bool Verify(string code, string storedHash, string storedSalt) =>
+            storedHash == "hash:" + code;
     }
 
     private sealed class FakeRackRepository : IRackRepository
@@ -76,6 +80,27 @@ public class RackSliceTests
             Task.FromResult(Codes.FirstOrDefault(c => c.Id == id && c.TenantId == t));
 
         public void AddCode(RackPairingCode code) => Codes.Add(code);
+
+        public Task<IReadOnlyList<RackPairingCode>> CodesByPrefixAsync(
+            string prefix, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<RackPairingCode>>([]);
+
+        public Task<bool> ConsumeCodeAsync(
+            Guid codeId, DateTime atUtc, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task LinkCodeToRackAsync(
+            Guid codeId, Guid rackId, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public void Add(Rack rack) { }
+
+        public Task<IReadOnlyList<Rack>> TwinsByInstallationAsync(
+            Guid t, string installationId, Guid except, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Rack>>([]);
+
+        public Task<string?> TenantNameAsync(Guid t, CancellationToken ct = default) =>
+            Task.FromResult<string?>(null);
 
         public void RemoveCode(RackPairingCode code)
         {

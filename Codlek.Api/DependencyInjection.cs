@@ -35,6 +35,16 @@ public static class DependencyInjection
         //    بالإيد، لأن الراكة بتقرا اللي يوصلها.
         services.AddRackRateLimiting(configuration);
 
+        /*
+          🔴 **إعدادات السيرفر اللي الراكة بتقراها.**
+
+          رابط المزامنة بيتبعت للراكة وقت التسجيل وبتفضل عليه
+          شهور — فبناؤه من ترويسة `Host` معناه إن اللي بيسجّل
+          بيحدّد فين الراكة هترفع شغلها.
+        */
+        services.Configure<Racks.RackServerOptions>(
+            configuration.GetSection(Racks.RackServerOptions.Section));
+
         services.AddJwtAuthentication(configuration);
         services.AddValidationProblemShape();
         return services;

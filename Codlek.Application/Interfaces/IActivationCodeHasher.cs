@@ -21,4 +21,13 @@ namespace Codlek.Application.Interfaces;
 public interface IActivationCodeHasher
 {
     (string Hash, string Salt) Create(string code);
+
+    /// <summary>
+    /// الكود ده بتاع البصمة دي؟
+    ///
+    /// <para>⚠️ <b>والتحقق بيتعمل على <u>كل</u> مرشّح ببادئة
+    /// الكود.</b> البادئة أربع حروف، فالتصادم ممكن — والحلقة لازم
+    /// تكمل.</para>
+    /// </summary>
+    bool Verify(string code, string storedHash, string storedSalt);
 }

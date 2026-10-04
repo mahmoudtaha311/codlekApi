@@ -82,6 +82,75 @@ public sealed class RackRepository(AppDbContext db) : IRackRepository
         db.RackPairingCodes.FirstOrDefaultAsync(
             c => c.Id == codeId && c.TenantId == tenantId, ct);
 
+    /// <summary>
+    /// 🔴 <b>عابر للشركات بالضرورة</b> — المحطة الجديدة مالهاش
+    /// شركة لسه، والكود هو اللي بيحدّدها.
+    ///
+    /// <para>⚠️ <b>ومتتبّعة</b>: عدّاد المحاولات الغلط بيزيد في
+    /// مكانه، والحفظ من وحدة العمل.</para>
+    ///
+    /// <para>⚠️ <b>والمنتهي داخل:</b> الرد عليه لازم يبقى «انتهت
+    /// صلاحيته» مش «غلط».</para>
+    /// </summary>
+    public async Task<IReadOnlyList<RackPairingCode>> CodesByPrefixAsync(
+        string prefix, CancellationToken ct = default) =>
+        await db.RackPairingCodes
+            .Where(c => c.CodePrefix == prefix && c.ConsumedAtUtc == null)
+            .ToListAsync(ct);
+
+    /// <summary>
+    /// 🔴 <b>تحديث مشروط بعدّ الصفوف — مش قراية وبعدها كتابة.</b>
+    ///
+    /// <para>الشرط <c>ConsumedAtUtc == null</c> جوّه الجملة نفسها،
+    /// فراكتين بنفس الكود في نفس اللحظة: واحدة بتاخد صف متغيّر
+    /// والتانية صفر.</para>
+    ///
+    /// <para>⚠️ <b>و<c>ExecuteUpdate</c> بتنزل فوراً — مش مع وحدة
+    /// العمل.</b> وده مقصود: الاستهلاك لازم يحصل <b>قبل</b> أي شغل
+    /// تاني، عشان اللي خسر السباق مايكمّلش.</para>
+    /// </summary>
+    public async Task<bool> ConsumeCodeAsync(
+        Guid codeId, DateTime atUtc, CancellationToken ct = default)
+    {
+        int claimed = await db.RackPairingCodes
+            .Where(c => c.Id == codeId && c.ConsumedAtUtc == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedAtUtc, atUtc), ct);
+
+        return claimed > 0;
+    }
+
+    /// <summary>
+    /// ⚠️ <b>الربط بعد ما المحطة تاخد معرّفها.</b> والصف ده هو
+    /// الدليل الوحيد على إن المحطة الفلانية اتسجّلت بأنهي إذن.
+    /// </summary>
+    public async Task LinkCodeToRackAsync(
+        Guid codeId, Guid rackId, CancellationToken ct = default) =>
+        await db.RackPairingCodes
+            .Where(c => c.Id == codeId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.ConsumedByRackId, rackId), ct);
+
+    public void Add(Rack rack) => db.Racks.Add(rack);
+
+    /// <summary>
+    /// ⚠️ <b>الملغية مستبعدة</b> — محطة اتلغت وهوية قرصها اتسجّلت
+    /// تاني ده تسجيل جديد مشروع مش استنساخ.
+    /// </summary>
+    public async Task<IReadOnlyList<Rack>> TwinsByInstallationAsync(
+        Guid tenantId, string installationId, Guid exceptRackId,
+        CancellationToken ct = default) =>
+        await db.Racks.AsNoTracking()
+            .Where(r => r.TenantId == tenantId
+                     && r.InstallationId == installationId
+                     && r.Id != exceptRackId
+                     && r.Status != RackStatus.Revoked)
+            .ToListAsync(ct);
+
+    public Task<string?> TenantNameAsync(Guid tenantId, CancellationToken ct = default) =>
+        db.Tenants.AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.Name)
+            .FirstOrDefaultAsync(ct);
+
     public void AddCode(RackPairingCode code) => db.RackPairingCodes.Add(code);
 
     public void RemoveCode(RackPairingCode code) => db.RackPairingCodes.Remove(code);

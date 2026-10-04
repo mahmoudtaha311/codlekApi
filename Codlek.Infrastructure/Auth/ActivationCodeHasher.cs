@@ -10,4 +10,7 @@ public sealed class ActivationCodeHasher : IActivationCodeHasher
 {
     public (string Hash, string Salt) Create(string code) =>
         PasswordHasher.Create(code);
+
+    public bool Verify(string code, string storedHash, string storedSalt) =>
+        PasswordHasher.Verify(code, storedHash, storedSalt);
 }

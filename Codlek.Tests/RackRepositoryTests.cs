@@ -28,7 +28,7 @@ public class RackRepositoryTests(RackDbFixture fixture) : IClassFixture<RackDbFi
 
     private static Rack NewRack(
         AppDbContext db, Guid tenantId, string code,
-        RackStatus status = RackStatus.Active)
+        RackStatus status = RackStatus.Active, string installationId = "")
     {
         var rack = new Rack
         {
@@ -36,6 +36,7 @@ public class RackRepositoryTests(RackDbFixture fixture) : IClassFixture<RackDbFi
             RackCode = code,
             Name = "محطة " + code,
             Status = status,
+            InstallationId = installationId,
         };
 
         db.Racks.Add(rack);
@@ -44,7 +45,8 @@ public class RackRepositoryTests(RackDbFixture fixture) : IClassFixture<RackDbFi
 
     private static RackPairingCode NewCode(
         AppDbContext db, Guid tenantId, string prefix,
-        DateTime? createdAtUtc = null, DateTime? consumedAtUtc = null)
+        DateTime? createdAtUtc = null, DateTime? consumedAtUtc = null,
+        int failedAttempts = 0)
     {
         var row = new RackPairingCode
         {
@@ -56,6 +58,7 @@ public class RackRepositoryTests(RackDbFixture fixture) : IClassFixture<RackDbFi
             CreatedAtUtc = createdAtUtc ?? DateTime.UtcNow,
             ExpiresAtUtc = (createdAtUtc ?? DateTime.UtcNow).AddMinutes(15),
             ConsumedAtUtc = consumedAtUtc,
+            FailedAttempts = failedAttempts,
         };
 
         db.RackPairingCodes.Add(row);
@@ -308,5 +311,235 @@ public class RackRepositoryTests(RackDbFixture fixture) : IClassFixture<RackDbFi
 
         Assert.All(ordered, clause =>
             Assert.Contains("[Id]", clause, StringComparison.Ordinal));
+    }
+
+    // =================================================================
+    //  التسجيل
+    // =================================================================
+    //
+    // 🔴 كل فحص تحت ليه **بادئة كود لوحده** (PRF1، PRF2، …).
+    //
+    //    الفحوص دي كلها بتشارك قاعدة واحدة، و`CodesByPrefixAsync`
+    //    **مش مربوطة بشركة** — فالعزل بالشركة اللي بيحمي باقي
+    //    الملف مابيحميهاش. بادئة مشتركة بين فحصين معناها إن
+    //    الصفوف بتعدّي من واحد للتاني، والفشل بيظهر **بس** لما
+    //    المجموعة كلها تتشغّل. (حصل فعلاً: الفحصين الأولانيين
+    //    وقعوا وهما صح.)
+
+    /// <summary>
+    /// 🔴 <b>البحث بالبادئة <u>مش</u> مربوط بشركة — وده مقصود.</b>
+    ///
+    /// <para>المحطة الجديدة مالهاش مفتاح ومالهاش شركة؛ <b>الكود</b>
+    /// هو اللي بيحدّد الشركة. فترشيح بالشركة قبل التحقق دور.</para>
+    /// </summary>
+    [Fact]
+    public async Task Codes_are_searched_by_prefix_across_all_workshops()
+    {
+        using var db = fixture.Create();
+        var mine = NewTenant(db);
+        var theirs = NewTenant(db);
+
+        NewCode(db, mine, "PRF1");
+        NewCode(db, theirs, "PRF1");
+        NewCode(db, mine, "ZZZZ");
+
+        await db.SaveChangesAsync();
+
+        var rows = await new RackRepository(db).CodesByPrefixAsync("PRF1");
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(2, rows.Select(r => r.TenantId).Distinct().Count());
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والمستهلك مستبعد من المرشّحين.</b> من غير الفلتر، كود
+    /// اتستخدم مرة كان يرجع يتطابق — وراكة تانية تاخد مفتاح من كود
+    /// مستهلك.
+    /// </summary>
+    [Fact]
+    public async Task A_consumed_code_is_not_a_candidate()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        NewCode(db, tenant, "PRF2");
+        NewCode(db, tenant, "PRF2", consumedAtUtc: DateTime.UtcNow.AddHours(-1));
+
+        await db.SaveChangesAsync();
+
+        var row = Assert.Single(await new RackRepository(db).CodesByPrefixAsync("PRF2"));
+
+        Assert.Null(row.ConsumedAtUtc);
+    }
+
+    /// <summary>
+    /// 🔴 <b>والمرشّحين بيرجعوا <u>متتبّعين</u> — والتتبّع ده
+    /// حمّال.</b>
+    ///
+    /// <para>زيادة المحاولات في المعالج بتتعمل على الكائنات اللي
+    /// رجعت من هنا وبعدها <c>SaveChanges</c>. حد يضيف
+    /// <c>AsNoTracking()</c> على الاستعلام ده — الزيادة بتفضل في
+    /// الذاكرة بس، والقفل بعد خمس محاولات <b>بيبقى مفيش</b>،
+    /// والتخمين يبقى مفتوح للأبد. والفحوص بالمزيّف كلها بتعدّي
+    /// لأن المزيّف بيشارك نفس الكائن.</para>
+    /// </summary>
+    [Fact]
+    public async Task Incrementing_a_candidate_actually_persists()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        NewCode(db, tenant, "PRF3");
+
+        await db.SaveChangesAsync();
+
+        var repo = new RackRepository(db);
+
+        foreach (var candidate in await repo.CodesByPrefixAsync("PRF3"))
+            candidate.FailedAttempts++;
+
+        await db.SaveChangesAsync();
+
+        // ⚠️ سياق جديد — عشان القراية تيجي من القاعدة مش من التتبّع.
+        using var fresh = fixture.Create();
+
+        Assert.Equal(
+            1,
+            (await fresh.RackPairingCodes.SingleAsync(c => c.TenantId == tenant))
+                .FailedAttempts);
+    }
+
+    /// <summary>
+    /// 🔴 <b>الاستهلاك بيكسب <u>مرة واحدة</u>.</b>
+    ///
+    /// <para>راكتين بيسجّلوا بنفس الكود في نفس اللحظة لازم واحدة بس
+    /// تكسب. والقراية-ثم-الكتابة بتخلّي الاتنين يكسبوا — يعني
+    /// محطتين بمفتاحين من كود واحد.</para>
+    /// </summary>
+    [Fact]
+    public async Task Only_the_first_consume_wins()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var code = NewCode(db, tenant, "PRF4");
+
+        await db.SaveChangesAsync();
+
+        var repo = new RackRepository(db);
+        var at = new DateTime(2026, 10, 4, 9, 30, 0, DateTimeKind.Utc);
+
+        Assert.True(await repo.ConsumeCodeAsync(code.Id, at));
+        Assert.False(await repo.ConsumeCodeAsync(code.Id, at.AddMinutes(1)));
+
+        using var fresh = fixture.Create();
+        var stored = await fresh.RackPairingCodes.SingleAsync(c => c.Id == code.Id);
+
+        // ⚠️ والوقت بتاع اللي كسب — مش بتاع اللي خسر.
+        Assert.Equal(at, stored.ConsumedAtUtc);
+    }
+
+    /// <summary>⚠️ وكود مش موجود مابيكسبش.</summary>
+    [Fact]
+    public async Task Consuming_a_missing_code_claims_nothing()
+    {
+        using var db = fixture.Create();
+
+        Assert.False(await new RackRepository(db).ConsumeCodeAsync(
+            Guid.NewGuid(), DateTime.UtcNow));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والكود المستهلك مابيتمسحش — بيتربط.</b> الصف ده هو
+    /// الدليل الوحيد على إن المحطة الفلانية اتسجّلت بأنهي إذن ومن
+    /// مين.
+    /// </summary>
+    [Fact]
+    public async Task Linking_a_code_keeps_the_row_and_names_the_rack()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var code = NewCode(db, tenant, "PRF5");
+        var rack = NewRack(db, tenant, "RACK-500");
+
+        await db.SaveChangesAsync();
+
+        var repo = new RackRepository(db);
+
+        await repo.ConsumeCodeAsync(code.Id, DateTime.UtcNow);
+        await repo.LinkCodeToRackAsync(code.Id, rack.Id);
+
+        using var fresh = fixture.Create();
+        var stored = await fresh.RackPairingCodes.SingleAsync(c => c.Id == code.Id);
+
+        Assert.Equal(rack.Id, stored.ConsumedByRackId);
+        Assert.NotNull(stored.ConsumedAtUtc);
+    }
+
+    /// <summary>
+    /// 🔴 <b>التوأم: نفس هوية القرص في نفس الورشة.</b>
+    ///
+    /// <para>⚠️ والملغية مستبعدة — محطة اتلغت وهوية قرصها اتسجّلت
+    /// تاني ده تسجيل جديد مشروع مش استنساخ. ومن غير الاستبعاد ده،
+    /// كل إعادة تسجيل لراكة ملغية بتولّد تنبيه استنساخ كذّاب.</para>
+    /// </summary>
+    [Fact]
+    public async Task Twins_exclude_the_new_rack_other_workshops_and_revoked_stations()
+    {
+        using var db = fixture.Create();
+        var mine = NewTenant(db);
+        var theirs = NewTenant(db);
+
+        var fresh_rack = NewRack(db, mine, "RACK-001", installationId: "disk-9");
+        NewRack(db, mine, "RACK-002", installationId: "disk-9");
+        NewRack(db, mine, "RACK-003", installationId: "disk-9",
+            status: RackStatus.Revoked);
+        NewRack(db, mine, "RACK-004", installationId: "disk-OTHER");
+        NewRack(db, theirs, "RACK-005", installationId: "disk-9");
+
+        await db.SaveChangesAsync();
+
+        var twins = await new RackRepository(db)
+            .TwinsByInstallationAsync(mine, "disk-9", fresh_rack.Id);
+
+        Assert.Equal("RACK-002", Assert.Single(twins).RackCode);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>وهوية قرص فاضية مابتعملش توأم مع كل محطة قديمة.</b>
+    /// المحطات القديمة كلها عندها <c>""</c> في الخانة دي.
+    /// </summary>
+    [Fact]
+    public async Task An_empty_installation_id_still_matches_only_empties()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var subject = NewRack(db, tenant, "RACK-010", installationId: "disk-1");
+        NewRack(db, tenant, "RACK-011");
+
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await new RackRepository(db)
+            .TwinsByInstallationAsync(tenant, "disk-1", subject.Id));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>واسم الشركة بيرجع <c>null</c> لو اتمسحت.</b> ودي الحالة
+    /// اللي بتخلّي الرد «مقفول» (<c>423</c>) مش «كود غلط».
+    /// </summary>
+    [Fact]
+    public async Task A_missing_workshop_has_no_name()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        await db.SaveChangesAsync();
+
+        var repo = new RackRepository(db);
+
+        Assert.NotNull(await repo.TenantNameAsync(tenant));
+        Assert.Null(await repo.TenantNameAsync(Guid.NewGuid()));
     }
 }

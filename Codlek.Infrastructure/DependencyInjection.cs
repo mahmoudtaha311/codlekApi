@@ -90,6 +90,7 @@ public static class DependencyInjection
         services.AddScoped<IActivationCodeHasher, ActivationCodeHasher>();
         services.AddScoped<IRackKeys, RackKeys>();
         services.AddScoped<IRackAuthenticator, RackAuthenticator>();
+        services.AddScoped<IDeviceCodeLeaseRepository, DeviceCodeLeaseRepository>();
         services.AddSingleton<IWorkbookWriter, Spreadsheets.XlsxWriter>();
         services.AddScoped<IDeviceReference, DeviceReference>();
         services.AddScoped<ITenantCounters, TenantCounters>();

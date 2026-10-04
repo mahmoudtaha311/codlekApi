@@ -442,6 +442,27 @@ public class ExportSliceTests
 
         public void AddCode(RackPairingCode code) { }
 
+        public Task<IReadOnlyList<RackPairingCode>> CodesByPrefixAsync(
+            string prefix, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<RackPairingCode>>([]);
+
+        public Task<bool> ConsumeCodeAsync(
+            Guid codeId, DateTime atUtc, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task LinkCodeToRackAsync(
+            Guid codeId, Guid rackId, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public void Add(Rack rack) { }
+
+        public Task<IReadOnlyList<Rack>> TwinsByInstallationAsync(
+            Guid t, string installationId, Guid except, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Rack>>([]);
+
+        public Task<string?> TenantNameAsync(Guid t, CancellationToken ct = default) =>
+            Task.FromResult<string?>(null);
+
         public void RemoveCode(RackPairingCode code) { }
     }
 

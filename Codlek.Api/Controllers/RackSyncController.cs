@@ -1,4 +1,8 @@
+using Codlek.Api.Extensions;
 using Codlek.Api.Racks;
+using Codlek.Application.Features.Rack.LeaseDeviceCodes;
+using MediatR;
+using Microsoft.AspNetCore.RateLimiting;
 using Codlek.Application.Contracts.Rack;
 using Codlek.Core.Sync;
 using Microsoft.AspNetCore.Authorization;
@@ -22,7 +26,7 @@ namespace Codlek.Api.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/v2/sync")]
-public sealed class RackSyncController : ControllerBase
+public sealed class RackSyncController(ISender sender) : ControllerBase
 {
     /// <summary>
     /// قدرات السيرفر — <b>الباب اللي الراكة بتسأل منه قبل أي
@@ -71,5 +75,39 @@ public sealed class RackSyncController : ControllerBase
 
             ServerTimeUtc = DateTime.UtcNow,
         });
+    }
+
+    /// <summary>
+    /// بلوك أكواد أجهزة للراكة.
+    ///
+    /// <para>🔴 <b>وده اللي بيخلّي الراكة تشتغل أوفلاين.</b> الفني
+    /// بيفحص لاب جديد وهو مقطوع عن النت، واللاب محتاج كود فوراً
+    /// عشان الليبل يتطبع.</para>
+    ///
+    /// <para>⚠️ <b>معاملات عنوان بس — مفيش جسم.</b> نفس القديم
+    /// بالحرف: الراكة بتبعت <c>POST</c> فاضي بمعاملات في العنوان،
+    /// وإضافة <c>[FromBody]</c> هنا بتخلّي الطلب ده يرجّع
+    /// <c>400</c>.</para>
+    ///
+    /// <para>⚠️ <b>و<c>size</c> المش مفهوم بياخد الافتراضي مش
+    /// <c>400</c></b> — الراكة في الميدان ومش المفروض تقف عشان
+    /// معامل.</para>
+    /// </summary>
+    [HttpPost("/api/v2/devices/lease")]
+    [RackKey]
+    [EnableRateLimiting(RackRateLimits.RackApi)]
+    [ProducesResponseType<DeviceCodeLeaseResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Lease(
+        [FromQuery] int? size,
+        [FromQuery] int? consumedThrough,
+        CancellationToken ct)
+    {
+        var rack = HttpContext.Rack();
+
+        var result = await sender.Send(
+            new LeaseDeviceCodesCommand(rack.TenantId, rack.Id, size, consumedThrough), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
     }
 }

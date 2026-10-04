@@ -93,6 +93,56 @@ public interface IRackRepository
       لحاجة بتحصل مرة كل مئتين ألف مش مكسب.
     */
 
+    /// <summary>
+    /// أكواد التفعيل المرشّحة لبادئة — <b>المستنية بس</b>.
+    ///
+    /// <para>🔴 <b>ومفيش ترشيح بالشركة هنا — ولا ممكن يكون
+    /// فيه.</b> المحطة الجديدة مالهاش مفتاح ومالهاش شركة؛ الكود هو
+    /// اللي بيحدّد الشركة. فالبحث عابر للشركات <b>بالضرورة</b>.</para>
+    ///
+    /// <para>⚠️ <b>ومفيش ترشيح بالانتهاء كمان.</b> الكود المنتهي
+    /// لازم يترشّح عشان الرد عليه يبقى «انتهت صلاحيته» مش «غلط» —
+    /// والفرق ده بيوفّر على الفني مكالمة. وكمان محاولته الغلط
+    /// بتتعدّ زي الباقي.</para>
+    ///
+    /// <para>⚠️ <b>متتبّعة</b> — عدّاد المحاولات الغلط بيزيد في
+    /// مكانه.</para>
+    /// </summary>
+    Task<IReadOnlyList<RackPairingCode>> CodesByPrefixAsync(
+        string prefix, CancellationToken ct = default);
+
+    /// <summary>
+    /// بيستهلك الكود — <b>تحديث مشروط بعدّ الصفوف</b>.
+    ///
+    /// <para>🔴 <b>مش قراية وبعدها كتابة.</b> راكتين بيسجّلوا بنفس
+    /// الكود في نفس اللحظة لازم <b>واحدة بس</b> تكسب، والقراية-ثم-
+    /// الكتابة بتخلّي الاتنين يكسبوا — يعني محطتين بمفتاحين من كود
+    /// واحد.</para>
+    ///
+    /// <para>⚠️ وبيرجّع <c>false</c> لو حد سبقنا.</para>
+    /// </summary>
+    Task<bool> ConsumeCodeAsync(
+        Guid codeId, DateTime atUtc, CancellationToken ct = default);
+
+    /// <summary>بيربط الكود المستهلك بالمحطة اللي اتعملت منه.</summary>
+    Task LinkCodeToRackAsync(
+        Guid codeId, Guid rackId, CancellationToken ct = default);
+
+    void Add(Rack rack);
+
+    /// <summary>
+    /// محطات تانية بنفس هوية القرص — <b>مؤشّر استنساخ</b>.
+    ///
+    /// <para>⚠️ <b>والملغية مستبعدة:</b> محطة اتلغت وهوية قرصها
+    /// اتسجّلت تاني ده تسجيل جديد مشروع مش استنساخ.</para>
+    /// </summary>
+    Task<IReadOnlyList<Rack>> TwinsByInstallationAsync(
+        Guid tenantId, string installationId, Guid exceptRackId,
+        CancellationToken ct = default);
+
+    /// <summary>اسم الشركة — للرد على التسجيل.</summary>
+    Task<string?> TenantNameAsync(Guid tenantId, CancellationToken ct = default);
+
     void AddCode(RackPairingCode code);
 
     void RemoveCode(RackPairingCode code);

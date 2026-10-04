@@ -37,6 +37,9 @@ public class TechnicianAccountTests
             Calls++;
             return ("hash:" + password, "salt:" + Calls);
         }
+
+        public bool Verify(string password, string storedHash, string storedSalt) =>
+            storedHash == "hash:" + password;
     }
 
     private sealed class FakeAccountRepository : ITechnicianAccountRepository

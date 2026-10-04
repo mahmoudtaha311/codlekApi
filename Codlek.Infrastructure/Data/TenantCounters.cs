@@ -32,6 +32,73 @@ public sealed class TenantCounters(AppDbContext db) : ITenantCounters
                             WHERE TenantId = {0} AND CounterName = {1})
         """;
 
+    /// <summary>
+    /// 🔴 <b>حجز بلوك — نفس الحركة بس بزيادة <c>count</c>.</b>
+    ///
+    /// <para><c>OUTPUT deleted.NextValue</c> بيرجّع أول رقم في
+    /// المدى، والمدى كله بقى محجوز للمنادي في جملة واحدة.</para>
+    /// </summary>
+    private const string Reserve = """
+        UPDATE TenantCounters
+           SET NextValue = NextValue + {2}
+        OUTPUT deleted.NextValue AS Value
+         WHERE TenantId = {0} AND CounterName = {1}
+        """;
+
+    /// <summary>
+    /// ⚠️ إدخال مشروط لبلوك — القيمة الجديدة <c>1 + count</c> لأن
+    /// الرقم الأول (واحد) بيروح للمنادي.
+    /// </summary>
+    private const string InsertBlock = """
+        INSERT INTO TenantCounters (TenantId, CounterName, NextValue)
+        SELECT {0}, {1}, 1 + {2}
+         WHERE NOT EXISTS (SELECT 1 FROM TenantCounters
+                            WHERE TenantId = {0} AND CounterName = {1})
+        """;
+
+    /// <summary>
+    /// 🔴 <b>المدى بيتحجز في جملة واحدة — مش حلقة.</b>
+    ///
+    /// <para>راكتين بيطلبوا في نفس اللحظة بياخدوا مديين
+    /// <b>مختلفين ومتصلين</b>. والراكة محتاجة المدى متصل عشان
+    /// توزّعه أوفلاين.</para>
+    ///
+    /// <para>⚠️ ونفس حكاية الإدخال المشروط اللي في
+    /// <see cref="NextAsync"/> — من غير أي لمس للمتتبّع، عشان
+    /// الدالة تبقى آمنة من جوّه حلقة دفعة.</para>
+    /// </summary>
+    public async Task<int> ReserveAsync(
+        Guid tenantId, string counterName, int count, CancellationToken ct = default)
+    {
+        // ⚠️ صفر أو سالب بياخد واحد — الدالة مابترفضش، المنادي هو
+        //    اللي بيقص القيمة قبلها.
+        int size = Math.Max(1, count);
+
+        var taken = await db.Database
+            .SqlQueryRaw<int>(Reserve, tenantId, counterName, size)
+            .ToListAsync(ct);
+
+        if (taken.Count > 0) return taken[0];
+
+        try
+        {
+            int created = await db.Database.ExecuteSqlRawAsync(
+                InsertBlock, [tenantId, counterName, size], ct);
+
+            if (created > 0) return 1;
+        }
+        catch (Exception)
+        {
+            // حد تاني سبقنا — الزيادة تحت بتحسمها.
+        }
+
+        var retry = await db.Database
+            .SqlQueryRaw<int>(Reserve, tenantId, counterName, size)
+            .ToListAsync(ct);
+
+        return retry.Count > 0 ? retry[0] : 1;
+    }
+
     public async Task<int> NextAsync(
         Guid tenantId, string counterName, CancellationToken ct = default)
     {

@@ -10,4 +10,7 @@ public sealed class TechnicianPasswords : ITechnicianPasswords
 {
     public (string Hash, string Salt) Create(string password) =>
         PasswordHasher.Create(password);
+
+    public bool Verify(string password, string storedHash, string storedSalt) =>
+        PasswordHasher.Verify(password, storedHash, storedSalt);
 }

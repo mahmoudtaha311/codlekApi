@@ -19,4 +19,20 @@ public interface ITenantCounters
     /// <c>RepairCode.CounterName</c>.
     /// </param>
     Task<int> NextAsync(Guid tenantId, string counterName, CancellationToken ct = default);
+
+    /// <summary>
+    /// بيحجز <paramref name="count"/> رقم على بعض — <b>وبيرجّع
+    /// أولهم</b>.
+    ///
+    /// <para>🔴 <b>وده مش حلقة على <see cref="NextAsync"/>.</b>
+    /// خمسمية نداء معناه خمسمية رحلة للقاعدة، والأهم إن راكة تانية
+    /// بتقدر تتخلّل بينهم فالمدى بيطلع مقطّع — والراكة محتاجة مدى
+    /// <b>متصل</b> عشان توزّعه أوفلاين.</para>
+    ///
+    /// <para>🔴 <b>ومش <c>MAX(number) + count</c>.</b> دي بتتسابق:
+    /// راكتين بيقروا نفس الرقم وبياخدوا نفس المدى، والقيد الفريد
+    /// بيرفض واحدة منهم بخطأ مالوش أي معنى للمستخدم.</para>
+    /// </summary>
+    Task<int> ReserveAsync(
+        Guid tenantId, string counterName, int count, CancellationToken ct = default);
 }

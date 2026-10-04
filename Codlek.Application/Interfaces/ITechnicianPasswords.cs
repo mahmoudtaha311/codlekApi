@@ -17,4 +17,14 @@ public interface ITechnicianPasswords
 {
     /// <summary>بصمة وملح جديدين.</summary>
     (string Hash, string Salt) Create(string password);
+
+    /// <summary>
+    /// الباسورد ده بتاع البصمة دي؟
+    ///
+    /// <para>🔴 <b>وبنفس المعاملات المشتركة مع الراكة بايت
+    /// ببايت.</b> الفني بيدخل على راكة وهي أوفلاين، فالراكة بتتحقق
+    /// من نفس البصمة بنفسها — ونسخة تانية من المعاملات هنا معناها
+    /// إن الباسورد اللي السيرفر قبله مابيعديش على الراكة.</para>
+    /// </summary>
+    bool Verify(string password, string storedHash, string storedSalt);
 }
