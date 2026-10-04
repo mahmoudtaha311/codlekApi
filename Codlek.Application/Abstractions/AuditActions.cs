@@ -96,4 +96,43 @@ public static class AuditActions
     public const string TechnicianCapabilityChanged = "technician.capability_changed";
 
     public const string TechnicianBrandsChanged = "technician.brands_changed";
+
+    // =================================================================
+    //  محطات الفحص
+    // =================================================================
+
+    public const string RackCodeCreated = "rack.code_created";
+
+    public const string RackCodeDeleted = "rack.code_deleted";
+
+    public const string RackSuspended = "rack.suspended";
+
+    public const string RackResumed = "rack.resumed";
+
+    public const string RackRevoked = "rack.revoked";
+
+    /*
+      🔴 **التلاتة اللي تحت مفيش حاجة في المشروع الجديد بتكتبهم —
+      لحد دلوقتي — ومع ذلك لازم يكونوا هنا.**
+
+      المشروع الجديد بيقرا **نفس قاعدة البيانات** اللي القديم شغّال
+      عليها، والقديم بيكتب الأكواد دي من نقط الراكة ومن خدمة دمج
+      الهوية. يعني صفحة سجل المراجعة في الجديد بتعرض صفوف
+      الأكواد دي **النهاردة**.
+
+      ⚠️ ومن غير ترجمة، السطر بيتعرض بالإنجليزي الخام جوّه سجل
+      عربي. ودي **بالظبط** الحكاية اللي حصلت في القديم:
+      `device.identity_merged` فضل **شهور** معروض خام ومحدّش شافه،
+      لأنه بيتكتب من خدمة مالهاش نقطة نهاية — يعني مفيش فحص نقطة
+      بيعدّي عليه.
+    */
+
+    /// <summary>بيتكتب من نقطة تسجيل الراكة — مرحلة <c>/api/v1/rack/*</c>.</summary>
+    public const string RackPaired = "rack.paired";
+
+    /// <summary>بيتكتب لما راكة تطلع بمعرّف تثبيت مكرر.</summary>
+    public const string RackCloneSuspected = "rack.clone_suspected";
+
+    /// <summary>بيتكتب من خدمة دمج هوية الأجهزة — مالهاش نقطة نهاية.</summary>
+    public const string DeviceIdentityMerged = "device.identity_merged";
 }

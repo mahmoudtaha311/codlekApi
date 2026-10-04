@@ -51,6 +51,23 @@ public static class AuditLabels
             [AuditActions.TechnicianUpdated] = "تعديل بيانات فني",
             [AuditActions.TechnicianCapabilityChanged] = "تعديل صلاحيات فني",
             [AuditActions.TechnicianBrandsChanged] = "تغيير ماركات فني",
+
+            // ----------------------------------------- محطات الفحص
+            [AuditActions.RackCodeCreated] = "إنشاء كود تفعيل محطة فحص",
+            [AuditActions.RackCodeDeleted] = "مسح كود تفعيل منتهي",
+            [AuditActions.RackSuspended] = "إيقاف محطة فحص",
+            [AuditActions.RackResumed] = "إعادة تفعيل محطة فحص",
+            [AuditActions.RackRevoked] = "إلغاء محطة فحص",
+
+            /*
+              ⚠️ **والتلاتة دول مفيش نقطة في المشروع الجديد بتكتبهم**
+              — بس القديم بيكتبهم في **نفس القاعدة**، فصفوفهم معروضة
+              في سجل الجديد النهاردة. ترجمتهم مش استباق لمرحلة جاية،
+              هي تغطية لبيانات موجودة.
+            */
+            [AuditActions.RackPaired] = "تفعيل محطة فحص",
+            [AuditActions.RackCloneSuspected] = "اشتباه في استنساخ محطة",
+            [AuditActions.DeviceIdentityMerged] = "دمج هوية جهاز",
         };
 
     public static string Action(string? action)

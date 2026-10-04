@@ -93,6 +93,95 @@ public class AuditLabelTests
         Assert.Equal(label, AuditLabels.Actor(type));
 
     // =================================================================
+    //  أكواد المشروع القديم
+    // =================================================================
+
+    /*
+      🔴 **المشروع الجديد بيقرا نفس قاعدة بيانات القديم.**
+
+      يعني صفحة السجل في الجديد بتعرض صفوف كتبها القديم — بأكواد
+      الجديد ممكن مايعرفش عنها حاجة. والفحص بالانعكاس اللي فوق
+      **مابيشوفش** دي: هو بيعدّي على ثوابت الجديد، فكود موجود في
+      البيانات وبس بيعدّي من تحته.
+
+      ⚠️ **وده مش فرض نظري.** تمن أكواد من دول (`rack.*` الستة
+      و`device.identity_merged`) ماكانش ليها ترجمة في الجديد لحد ما
+      اتضافت مع قطاع المحطات — يعني السجل كان هيعرض إنجليزي خام
+      جوّه صفحة عربية.
+
+      ⚠️ **والقايمة دي مستخرجة من**
+      `CodlekWeb/Services/AuditActions.cs`:
+
+          grep -oP '(?<== ")[a-z_]+\.[a-z_]+(?=")' AuditActions.cs | sort
+
+      ولما القديم يتشال، القايمة دي بتبقى هي السجل الوحيد لللي
+      موجود في البيانات التاريخية — فمتتشالش معاه.
+    */
+    public static readonly string[] WrittenByTheOldProject =
+    [
+        "brand.alias_added",
+        "brand.alias_removed",
+        "brand.created",
+        "brand.updated",
+        "department.created",
+        "department.updated",
+        "device.handed_over",
+        "device.identity_merged",
+        "device.marked_ready",
+        "device.sent_to_repair",
+        "rack.clone_suspected",
+        "rack.code_created",
+        "rack.code_deleted",
+        "rack.paired",
+        "rack.resumed",
+        "rack.revoked",
+        "rack.suspended",
+        "repair.approved",
+        "repair.assigned",
+        "repair.cancelled",
+        "repair.completed",
+        "repair.created",
+        "repair.reassigned",
+        "repair.rejected",
+        "repair.retest_started",
+        "repair.started",
+        "repair.unable_to_repair",
+        "technician.activated",
+        "technician.brands_changed",
+        "technician.capability_changed",
+        "technician.created",
+        "technician.password_reset",
+        "technician.suspended",
+        "technician.updated",
+        "webuser.activated",
+        "webuser.created",
+        "webuser.password_reset",
+        "webuser.suspended",
+    ];
+
+    [Fact]
+    public void Every_action_the_old_project_writes_is_translated()
+    {
+        var missing = WrittenByTheOldProject
+            .Where(action => AuditLabels.Action(action) == action)
+            .ToList();
+
+        Assert.Empty(missing);
+    }
+
+    /// <summary>
+    /// ⚠️ حاجز على القايمة نفسها — واحدة اتقصّت بالغلط بتخلّي
+    /// الفحص اللي فوق يعدّي وهو بيقيس أقل.
+    /// </summary>
+    [Fact]
+    public void The_old_vocabulary_list_is_complete()
+    {
+        Assert.Equal(38, WrittenByTheOldProject.Length);
+        Assert.Equal(
+            WrittenByTheOldProject.Length, WrittenByTheOldProject.Distinct().Count());
+    }
+
+    // =================================================================
     //  حارس السجل
     // =================================================================
 
