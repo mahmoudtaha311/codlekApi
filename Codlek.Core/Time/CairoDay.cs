@@ -56,6 +56,55 @@ public static class CairoDay
     public static DateTime? AfterUtc(DateTime? cairoDate) =>
         cairoDate is { } date ? StartOfDayUtc(date.Date.AddDays(1)) : null;
 
+    /// <summary>
+    /// النهاردة بتوقيت القاهرة.
+    ///
+    /// <para>🔴 <b>مش <c>DateTime.Today</c>.</b> ده بيقرا توقيت
+    /// السيرفر، واللي ممكن يكون UTC — فـ«شغل النهاردة» كان بيبدأ
+    /// الساعة ٢ بالليل، واللي بيتفحص بعد ١٢ بالليل بتوقيت القاهرة
+    /// بيتحسب على اليوم اللي فات.</para>
+    /// </summary>
+    public static DateTime Today => ToCairo(DateTime.UtcNow).Date;
+
+    /// <summary>
+    /// بداية اليوم القاهري ده كـUTC — <b>عامة عشان التحليلات
+    /// تستعملها</b>.
+    /// </summary>
+    public static DateTime StartOf(DateTime cairoDate) => StartOfDayUtc(cairoDate);
+
+    /// <summary>
+    /// إزاحة القاهرة عن UTC بالدقايق في لحظة معيّنة.
+    ///
+    /// <para>🔴 <b>ليه بالدقايق ومحسوبة مرة واحدة.</b> التجميع
+    /// اليومي على اللوحة لازم يتعمل بأيام <b>القاهرة</b>، والقاعدة
+    /// شايلة UTC. وتحويل كل صف في SQL مستحيل — مفيش دالة مناطق
+    /// زمنية مترجمة — فبناخد الإزاحة هنا وبنضيفها جوّه الاستعلام
+    /// (<c>DATEADD</c>) قبل ما ناخد التاريخ.</para>
+    ///
+    /// <para>⚠️ <b>الحد المعروف:</b> الإزاحة بتتحسب مرة لكل نافذة،
+    /// فلو النافذة عدّت على تغيير التوقيت الصيفي (آخر أبريل وآخر
+    /// أكتوبر في مصر)، الأيام اللي على الحد ممكن تتحسب بساعة فرق.
+    /// والبديل — سحب كل الصفوف وتجميعها في الذاكرة — بيكسر اللوحة
+    /// مع أول عشرة آلاف فحص. الخطأ محدود بساعة في يومين في السنة،
+    /// والمكسب إن التجميع بيفضل في SQL.</para>
+    /// </summary>
+    public static int OffsetMinutes(DateTime utc)
+    {
+        try
+        {
+            var source = utc.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(utc, DateTimeKind.Utc)
+                : utc.ToUniversalTime();
+
+            return (int)Zone.GetUtcOffset(source).TotalMinutes;
+        }
+        catch
+        {
+            // ⚠️ ملجأ أخير: توقيت مصر الشتوي.
+            return 120;
+        }
+    }
+
     private static DateTime StartOfDayUtc(DateTime cairoDate)
     {
         try
