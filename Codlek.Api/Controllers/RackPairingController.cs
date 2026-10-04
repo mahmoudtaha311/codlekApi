@@ -6,7 +6,6 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Options;
 
 namespace Codlek.Api.Controllers;
 
@@ -20,7 +19,7 @@ namespace Codlek.Api.Controllers;
 [ApiController]
 [AllowAnonymous]
 public sealed class RackPairingController(
-    ISender sender, IOptions<RackServerOptions> server) : ControllerBase
+    ISender sender, CloudAddresses cloud) : ControllerBase
 {
     /// <summary>
     /// ⚠️ <b>الجسم فيه الكود وبس — مفيش معرّف شركة.</b> الكود هو
@@ -56,7 +55,7 @@ public sealed class RackPairingController(
                 HttpContext.Connection.RemoteIpAddress?.ToString() ?? "",
 
                 // 🔴 ورابط المزامنة من الإعدادات.
-                server.Value.SyncUrl), ct);
+                cloud.SyncUrl), ct);
 
         /*
           🔴 **والفشل بيرجع `{code, message}` مش `ProblemDetails`.**

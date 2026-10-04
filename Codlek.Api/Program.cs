@@ -36,7 +36,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(
     builder.Configuration, builder.Environment.IsDevelopment());
-builder.Services.AddApiServices(builder.Configuration);
+builder.Services.AddApiServices(
+    builder.Configuration, builder.Environment.IsDevelopment());
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
@@ -94,3 +95,18 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+/*
+  🔴 **الكلاس الفاضي ده هو اللي بيخلّي فحوص العقد تشغّل
+  السيرفر فعلاً.**
+
+  `WebApplicationFactory<Program>` محتاج النوع يبقى مرئي، والمشروع
+  بمستوى أعلى (top-level statements) بيولّد `Program` داخلي.
+
+  ⚠️ **ومن غير الفحوص دي، جسم الـ`401` على مسارات الراكة
+  مابيتقاسش من خلال الأنبوب** — وده بالظبط اللي سرّب `ProblemDetails`
+  على رد المفروض **فاضي**: فحوص الوحدة كانت بتشوف
+  `UnauthorizedResult` وتعدّي خضرا، و`[ApiController]` بيحوّلها بعد
+  كده لجسم JSON.
+*/
+public partial class Program;

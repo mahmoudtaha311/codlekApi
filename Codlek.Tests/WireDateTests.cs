@@ -235,4 +235,45 @@ public class WireDateTests
     {
         Assert.Equal("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", UtcDateTimeConverter.Format);
     }
+
+    /// <summary>
+    /// 🔴 <b>والمحوّل الاختياري تأكيد مش إصلاح — والفحص ده هو
+    /// الدليل.</b>
+    ///
+    /// <para>كان فيه تعليق في المشروع بيقول إن
+    /// <c>JsonConverter&lt;DateTime&gt;</c> «مابينطبقش على
+    /// <c>DateTime?</c>» — وده غلط: <c>System.Text.Json</c> بيلفّ
+    /// المحوّل تلقائياً (<c>NullableConverterFactory</c>). والفرق
+    /// مهم: القديم بيسجّل محوّل <b>واحد</b> وتواريخه الاختيارية
+    /// بتخرج بـ<c>Z</c> صح، فلو فهمنا الميكانيكا غلط كنا هنفتكر إن
+    /// القديم فيه عطل ونروح نـ«نصلّحه».</para>
+    /// </summary>
+    [Fact]
+    public void One_converter_already_covers_nullable_dates()
+    {
+        var single = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        single.Converters.Add(new UtcDateTimeConverter());
+
+        string json = JsonSerializer.Serialize(
+            new { at = (DateTime?)new DateTime(2026, 10, 4, 7, 12, 2, DateTimeKind.Utc) },
+            single);
+
+        Assert.Equal("{\"at\":\"2026-10-04T07:12:02.000Z\"}", json);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>وبنسجّل الاتنين بردو.</b> الضمانة تبقى في كودنا مش في
+    /// تفاصيل المكتبة — ولو STJ غيّر سلوكه بكرة، السطر اللي فوق هو
+    /// اللي بيقع، مش سطح الراكة كله.
+    /// </summary>
+    [Fact]
+    public void The_feeds_register_both_converters_anyway()
+    {
+        Assert.Contains(
+            RackWire.Downstream.Converters, c => c is UtcDateTimeConverter);
+
+        Assert.Contains(
+            RackWire.Downstream.Converters, c => c is NullableUtcDateTimeConverter);
+    }
 }

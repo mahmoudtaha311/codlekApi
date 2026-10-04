@@ -65,7 +65,13 @@ public static class RackWire
 
         options.Converters.Add(new UtcDateTimeConverter());
 
-        // 🔴 والاختياري كمان — المحوّل الأول مابينطبقش على `DateTime?`.
+        /*
+          ⚠️ **والاختياري تأكيد مش إصلاح.**
+
+          STJ أصلاً بيلفّ محوّل `DateTime` ويستعمله مع `DateTime?`،
+          والقديم بيسجّل محوّل واحد وبيخرج `Z` صح. بنسجّله صراحةً
+          عشان الضمانة تبقى في كودنا مش في تفاصيل المكتبة.
+        */
         options.Converters.Add(new NullableUtcDateTimeConverter());
 
         return options;

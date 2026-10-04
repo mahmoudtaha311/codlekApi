@@ -17,7 +17,8 @@ namespace Codlek.Api;
 public static class DependencyInjection
 {
     public static IServiceCollection AddApiServices(
-        this IServiceCollection services, IConfiguration configuration)
+        this IServiceCollection services, IConfiguration configuration,
+        bool isDevelopment)
     {
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();
@@ -44,6 +45,19 @@ public static class DependencyInjection
         */
         services.Configure<Racks.RackServerOptions>(
             configuration.GetSection(Racks.RackServerOptions.Section));
+
+        /*
+          🔴 **والعنوان بيتحقق <u>عند الإقلاع</u> مش عند أول
+          تسجيل.**
+
+          عنوان فاضي معناه `syncUrl` فاضي على كل راكة بتتسجّل،
+          والراكة بتخزّنه وبتفضل تحاول ترفع عليه — ومحدّش بياخد باله
+          غير بعد ما شغل أسبوع يبقى واقف في الطابور. الوقوف هنا
+          بيتصلّح في دقيقة؛ العنوان الفاضي بيتصلّح بإعادة تسجيل كل
+          المحطات.
+        */
+        services.AddSingleton(
+            Racks.CloudAddresses.Resolve(configuration, isDevelopment));
 
         services.AddJwtAuthentication(configuration);
         services.AddValidationProblemShape();

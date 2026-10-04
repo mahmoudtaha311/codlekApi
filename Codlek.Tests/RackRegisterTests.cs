@@ -75,10 +75,26 @@ public class RackRegisterTests
         public int ConsumeCalls;
         public readonly List<(Guid Code, Guid Rack)> Links = [];
 
+        /// <summary>
+        /// 🔴 <b>عدّاد الاستعلامات — والعدّاد ده اتضاف بعد تحوير
+        /// نجا.</b>
+        ///
+        /// <para>فحص «الكود القصير بيترفض قبل أي استعلام» كان بيقيس
+        /// الرد بس، فشيل حد الطول خلّى الرد زي ما هو (كود من ٣ حروف
+        /// بادئته مش موجودة أصلاً) والفحص عدّى. والفرق حقيقي: كود
+        /// متقطّع زي <c>4F7K-92</c> بادئته <b>موجودة</b>، فبيوصل
+        /// القاعدة وبيحرق محاولة من كل كود شرعي في البادئة.</para>
+        /// </summary>
+        public int PrefixQueries;
+
         public Task<IReadOnlyList<RackPairingCode>> CodesByPrefixAsync(
-            string prefix, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<RackPairingCode>>(
+            string prefix, CancellationToken ct = default)
+        {
+            PrefixQueries++;
+
+            return Task.FromResult<IReadOnlyList<RackPairingCode>>(
                 Codes.Where(c => c.CodePrefix == prefix && c.ConsumedAtUtc == null).ToList());
+        }
 
         public Task<bool> ConsumeCodeAsync(
             Guid codeId, DateTime atUtc, CancellationToken ct = default)
@@ -309,7 +325,13 @@ public class RackRegisterTests
     // =================================================================
 
     /// <summary>
-    /// ⚠️ <b>الكود القصير مابيوصلش القاعدة خالص.</b>
+    /// 🔴 <b>الكود القصير مابيوصلش القاعدة خالص — وده مش
+    /// تحسين.</b>
+    ///
+    /// <para>كود متقطّع زي <c>4F7K-92</c> بادئته <b>موجودة فعلاً</b>
+    /// (<c>4F7K</c>)، فلولا حد الطول كان بيوصل القاعدة وبيحرق محاولة
+    /// من <b>كل</b> كود شرعي في البادئة دي — في كل الشركات. يعني
+    /// فني بيكتب الكود ناقص خمس مرات بيقفل كود مدير تاني.</para>
     /// </summary>
     [Theory]
     [InlineData(null)]
@@ -320,7 +342,7 @@ public class RackRegisterTests
     public async Task A_short_code_is_refused_before_any_query(string? code)
     {
         var h = Build();
-        NewCode(h, "4F7K-92QX");
+        var real = NewCode(h, "4F7K-92QX");
 
         var result = await h.Handler.Handle(Register(code), default);
 
@@ -328,6 +350,28 @@ public class RackRegisterTests
         Assert.Equal(RackRegisterErrors.InvalidCode, result.Error);
         Assert.Empty(h.Racks.Racks);
         Assert.Equal(0, h.Racks.ConsumeCalls);
+
+        // 🔴 ولا استعلام واحد — ولا محاولة اتحرقت من الكود الشرعي.
+        Assert.Equal(0, h.Racks.PrefixQueries);
+        Assert.Equal(0, real.FailedAttempts);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والكود الكامل <u>بيوصل</u> القاعدة.</b>
+    ///
+    /// <para>من غير الحراسة دي، الفحص اللي فوق بيعدّي على كود مرفوض
+    /// دايماً — يعني بيقيس «مفيش استعلام» على حاجة مفيش فيها استعلام
+    /// أصلاً.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_full_length_code_does_reach_the_database()
+    {
+        var h = Build();
+        NewCode(h, "4F7K-92QX");
+
+        await h.Handler.Handle(Register("ZZZZ-ZZZZ"), default);
+
+        Assert.Equal(1, h.Racks.PrefixQueries);
     }
 
     /// <summary>
@@ -343,6 +387,28 @@ public class RackRegisterTests
         var result = await h.Handler.Handle(Register("4f7k-92qx"), default);
 
         Assert.True(result.IsSuccess);
+    }
+
+    /// <summary>
+    /// 🔴 <b>الشرطة جزء من السر — مابتتشالش.</b>
+    ///
+    /// <para>البصمة اتعملت على النص بشرطته، فالفني اللي كتبه من غير
+    /// شرطة <b>مابيدخلش</b>. ولو حد «صلّح» ده بإنه يشيل الشرطة قبل
+    /// المقارنة، كل تسجيل في الميدان بياخد <c>404</c> وكل محاولة
+    /// بتحرق واحدة من خمس من كل كود مستني في البادئة.</para>
+    /// </summary>
+    [Fact]
+    public async Task The_dash_is_part_of_the_secret()
+    {
+        var h = Build();
+        NewCode(h, "4F7K-92QX");
+
+        Assert.Equal("4F7K-92QX", RackRegistration.Clean(" 4f7k-92qx "));
+
+        var result = await h.Handler.Handle(Register("4F7K92QX"), default);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(RackRegisterErrors.InvalidCode, result.Error);
     }
 
     [Fact]
@@ -454,6 +520,29 @@ public class RackRegisterTests
     public void Lockout_starts_at_five(int attempts, bool locked)
     {
         Assert.Equal(locked, RackRegistration.LockedOut(attempts));
+    }
+
+    /// <summary>
+    /// 🔴 <b>والترتيب نفسه عقد: القفل قبل الانتهاء.</b>
+    ///
+    /// <para>كود مقفول <b>ومنتهي</b> بياخد <c>404</c> مش <c>410</c> —
+    /// لأنه مابيتطابقش أصلاً فمابيوصلش لفحص الانتهاء. وقلب الترتيب
+    /// بيقول للي بيخمّن «البادئة دي فيها كود موجود».</para>
+    /// </summary>
+    [Fact]
+    public async Task A_code_that_is_both_locked_out_and_expired_is_a_404()
+    {
+        var h = Build();
+
+        NewCode(
+            h, "4F7K-92QX",
+            expiresAtUtc: DateTime.UtcNow.AddMinutes(-30),
+            failedAttempts: RackRegistration.MaxFailedAttempts);
+
+        var result = await h.Handler.Handle(Register("4F7K-92QX"), default);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(404, result.Error.StatusCode);
     }
 
     // =================================================================

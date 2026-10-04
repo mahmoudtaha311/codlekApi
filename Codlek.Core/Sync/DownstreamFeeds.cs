@@ -27,8 +27,16 @@ public static class DownstreamFeeds
     public const string Containers = "containers";
 
     /// <summary>
-    /// ⚠️ <b>الترتيب ده جزء من العقد.</b> فيه فحص في القديم بيقارن
-    /// القايمة كاملة بالترتيب — والراكة بتخزّنها على القرص.
+    /// ⚠️ <b>الأسماء عقد — والترتيب لأ.</b>
+    ///
+    /// <para>الراكة بتقارن القايمة <b>كمجموعة</b> (<c>Offers</c>
+    /// بتدوّر على الاسم جوّه المتخزّن)، فترتيب مختلف مابيغيّرش حاجة
+    /// عندها. الترتيب متثبّت هنا عشان الرد يبقى قابل للمقارنة بايت
+    /// ببايت في الفحوص وبس.</para>
+    ///
+    /// <para>🔴 <b>أما تغيير <u>اسم</u> فيهم فده بيطفّي التغذية
+    /// دي</b> على كل راكة في الميدان: <c>Offers</c> بترجّع
+    /// <c>false</c> والسحب بيقف — ساكت.</para>
     /// </summary>
     public static readonly IReadOnlyList<string> All =
         [RepairRoster, RepairAssigned, Containers];
