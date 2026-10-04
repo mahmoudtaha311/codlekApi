@@ -212,10 +212,38 @@ public class RepairCoreRuleTests
     ///
     /// <para>ده سلوك حقيقي شغّال، والفحص بيثبّته مش بيوافق عليه:
     /// «تصليحه» بيغيّر اللي الداش بورد بتعرضه.</para>
+    ///
+    /// <para>🔴 <b>والفحص ده أنقذ نفسه مرة.</b> وإحنا بنقرا القديم
+    /// لقينا فيه قاعدة أغنى (<c>DeviceNaming.Compose</c>) بتشيل تكرار
+    /// الماركة وكود المصنّع، وافتكرناها ناقصة عندنا ونقلناها —
+    /// والفحص ده وقع. طلع إن القاعدة الغنية دي بتتستعمل في
+    /// <c>LaptopName</c> وبس، وهو بيتعرض في <b>صفحات Razor</b>
+    /// القديمة لوحدها؛ أما <c>/api/v1/repairs</c> بيحسب الاسم بإيده
+    /// بـ<c>$"{manufacturer} {commercial ?? raw}"</c> — تكرار
+    /// وكل.</para>
+    ///
+    /// <para>⚠️ فالداش بورد بتقرا الـAPI، والـAPI ده هو اللي بنطابقه.
+    /// والسطر ده هو اللي منع انحراف في تلات نقط.</para>
     /// </summary>
     [Fact]
     public void The_double_manufacturer_artefact_is_pinned() =>
         Assert.Equal("HP HP ProBook", DeviceNaming.Display("HP", null, "HP ProBook"));
+
+    /// <summary>
+    /// ⚠️ <b>والاسم التجاري بياخد الأولوية حتى لو كان كود
+    /// مصنّع.</b>
+    ///
+    /// <para>القديم على <c>/api/v1</c> مابيشيلش كود المصنّع —
+    /// والشيل بيتعمل في صفحات Razro بس. ١٢ جهاز في الإنتاج اسمهم
+    /// التجاري بيبدأ بكود، وبيظهر كده على الـAPI <b>في القديم
+    /// كمان</b>.</para>
+    /// </summary>
+    [Fact]
+    public void An_oem_code_in_the_commercial_name_is_not_stripped_on_the_api() =>
+        Assert.Equal(
+            "103C_5336AN HP EliteBook",
+            DeviceNaming.Model(
+                "103C_5336AN HP EliteBook", "HP EliteBook 835 G8 Notebook PC"));
 
     [Theory]
     [InlineData(null, null, "X230", "X230")]
