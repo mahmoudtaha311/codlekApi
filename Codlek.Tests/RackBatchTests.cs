@@ -884,7 +884,10 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
             using var rival = server.CreateDb();
 
-            rival.Devices.Add(new Device { Id = deviceId, TenantId = server.TenantId });
+            rival.Devices.Add(new Device
+            {
+                Id = deviceId, TenantId = server.TenantId, LastKnownModel = "RIVAL",
+            });
 
             rival.SyncBatches.Add(new SyncBatch
             {
@@ -897,9 +900,14 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
             await rival.SaveChangesAsync();
         };
 
+        server.TrySaveResults.Clear();
+
         try
         {
-            using var response = await PostAsync(Batch(batchId, Item("device", Device(deviceId))));
+            var ours = Device(deviceId);
+            ours.LastKnownModel = "OURS";
+
+            using var response = await PostAsync(Batch(batchId, Item("device", ours)));
 
             Assert.Equal("true", Assert.Single(response.Headers.GetValues("Idempotent-Replay")));
 
@@ -907,6 +915,14 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
             Assert.Equal(42, root.GetProperty("summary").GetProperty("applied").GetInt32());
             Assert.Equal(before, await ReportsReceivedAsync());
+
+            // 🔴 رد المنافس اتقرا **قبل** أي كتابة تانية: حفظ واحد وقع،
+            //    ومفيش إعادة تطبيق فوق شغل المنافس.
+            Assert.Equal([false], server.TrySaveResults);
+
+            using var db = server.CreateDb();
+
+            Assert.Equal("RIVAL", (await db.Devices.SingleAsync(d => d.Id == deviceId)).LastKnownModel);
         }
         finally
         {
@@ -1268,6 +1284,221 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
         public override void Write(byte[] buffer, int offset, int count) =>
             throw new NotSupportedException();
+    }
+
+    // =================================================================
+    //  ٩ · ثغرات كشفها التحوير المقصود
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>الإعادة بترجّع الرد المخزّن <u>من غير ما تطبّق تاني</u>.</b>
+    /// الإعادة اللي بتطبّق قبل ما تكتشف إنها إعادة بتكتب لقطة قديمة
+    /// فوق اللي اتغيّر على السيرفر من ساعتها — ومافيش رد بيبان غلط،
+    /// فالدهس بيعدّي في صمت.
+    /// </summary>
+    [Fact]
+    public async Task A_resent_batch_does_not_overwrite_what_changed_since()
+    {
+        var batchId = Guid.NewGuid();
+        var deviceId = Guid.NewGuid();
+        var workItemId = Guid.NewGuid();
+
+        var batch = Batch(batchId,
+            Item("device", Device(deviceId)),
+            Item("workitem", new RepairWorkItemSyncPayload
+            {
+                Id = workItemId,
+                DeviceId = deviceId,
+                Status = (int)RepairStatus.WaitingForRepair,
+                OpenedAtUtc = DateTime.UtcNow.AddMinutes(-30),
+                FaultSummary = "من الراكة",
+            }));
+
+        await ReadAsync(await PostAsync(batch));
+
+        // المدير عدّل الأمر من اللوحة بعد الرفع.
+        using (var db = server.CreateDb())
+        {
+            var row = await db.RepairWorkItems.SingleAsync(w => w.Id == workItemId);
+            row.FaultSummary = "اتعدّل من اللوحة";
+            await db.SaveChangesAsync();
+        }
+
+        using var again = await PostAsync(batch);
+
+        Assert.Equal("true", Assert.Single(again.Headers.GetValues("Idempotent-Replay")));
+
+        using var after = server.CreateDb();
+
+        Assert.Equal(
+            "اتعدّل من اللوحة",
+            (await after.RepairWorkItems.SingleAsync(w => w.Id == workItemId)).FaultSummary);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>دفعة من غير معرّف عمرها ما بتتعاد</b> — حتى لو فيه صف
+    /// بمعرّف فاضي متسجّل بالغلط. «مفيش معرّف» معناها «مفيش سجل
+    /// تكرار»، مش «المعرّف الفاضي ده سجل».
+    /// </summary>
+    [Fact]
+    public async Task A_batch_without_an_id_never_replays_anything()
+    {
+        await StoreReplyAsync(Guid.Empty, Reply(Guid.Empty, applied: 99));
+
+        try
+        {
+            var device = Item("device", Device(Guid.NewGuid()));
+
+            using var response = await PostAsync(Batch(Guid.Empty, device));
+
+            Assert.False(response.Headers.Contains("Idempotent-Replay"));
+
+            var root = await ReadAsync(response);
+
+            Assert.Equal(1, root.GetProperty("summary").GetProperty("applied").GetInt32());
+        }
+        finally
+        {
+            using var db = server.CreateDb();
+
+            await db.SyncBatches
+                .Where(b => b.RackId == server.RackId && b.BatchId == Guid.Empty)
+                .ExecuteDeleteAsync();
+        }
+    }
+
+    /// <summary>
+    /// 🔴 <b>رد متخزّن قيمته <c>null</c> حرفياً = ٥٠٠ برضه.</b> «فيه صف»
+    /// و«الصف فاضي» مش «مفيش دفعة» — والشغل مابيتعادش.
+    /// </summary>
+    [Fact]
+    public async Task A_stored_reply_of_null_fails_closed()
+    {
+        var batchId = Guid.NewGuid();
+        var deviceId = Guid.NewGuid();
+
+        await StoreReplyAsync(batchId, "null");
+
+        using var response = await PostAsync(Batch(batchId, Item("device", Device(deviceId))));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        using var db = server.CreateDb();
+
+        Assert.False(await db.Devices.AnyAsync(d => d.Id == deviceId));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>النتايج بترجع بترتيب التطبيق — الجهاز الأول</b> زي القديم
+    /// بالحرف، مهما كان ترتيب المصفوفة.
+    /// </summary>
+    [Fact]
+    public async Task Results_come_back_in_apply_order()
+    {
+        var deviceId = Guid.NewGuid();
+
+        var move = Item("workflow", new DeviceWorkflowEventSyncPayload
+        {
+            EventId = Guid.NewGuid(),
+            DeviceId = deviceId,
+            EventType = (int)DeviceWorkflowEventType.StageChanged,
+            ToStage = (int)DeviceOperationalStage.Tested,
+            OccurredAtUtc = DateTime.UtcNow.AddMinutes(-1),
+        });
+
+        var report = Item("report", Report(deviceId));
+        var device = Item("device", Device(deviceId));
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), move, report, device)));
+
+        var order = root.GetProperty("results").EnumerateArray()
+            .Select(r => Guid.Parse(r.GetProperty("outboxId").GetString()!))
+            .ToArray();
+
+        Assert.Equal([device.OutboxId, report.OutboxId, move.OutboxId], order);
+    }
+
+    /// <summary>
+    /// 🔴 <b>رفض الجهاز بيوصل بعلامة الإعادة بتاعته هو.</b> كود متكرر
+    /// على هاردوير تاني محتاج المدير — الإعادة الآلية مش هتغيّر حاجة،
+    /// ولو اتعلّم «مؤقت» الراكة كانت هتلف عليه للأبد.
+    /// </summary>
+    [Fact]
+    public async Task A_device_rejection_keeps_its_own_retry_flag()
+    {
+        string code = "LP-" + Random.Shared.Next(10_000_000, 99_999_999);
+
+        var first = Device(Guid.NewGuid());
+        first.PublicCode = code;
+
+        await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), Item("device", first))));
+
+        var second = Device(Guid.NewGuid());
+        second.PublicCode = code;
+
+        var clash = Item("device", second);
+
+        var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), clash)));
+
+        var error = ErrorOf(root, clash.OutboxId);
+
+        Assert.Equal("DuplicateDeviceCode", error.GetProperty("code").GetString());
+        Assert.False(error.GetProperty("retryable").GetBoolean());
+    }
+
+    /// <summary>
+    /// 🔴 <b>جهاز عدّى في أول مرة واترفض في الإعادة = «مرفوض» — مش
+    /// «اتطبّق» من المرة الأولى.</b> منافس خد كود الجهاز في نص السباق؛
+    /// لو الرفض مابيكتبش الحالة، الصف بيفضل «اتطبّق» ومعاه خطأ —
+    /// والراكة بتمسحه وهو مااتخزّنش.
+    /// </summary>
+    [Fact]
+    public async Task A_device_that_loses_its_code_in_the_race_is_rejected_not_left_applied()
+    {
+        string code = "LP-" + Random.Shared.Next(10_000_000, 99_999_999);
+        var deviceId = Guid.NewGuid();
+
+        server.TrySaveResults.Clear();
+
+        server.BeforeTrySave = async call =>
+        {
+            if (call != 1) return;
+
+            using var rival = server.CreateDb();
+
+            rival.Devices.Add(new Device
+            {
+                Id = Guid.NewGuid(), TenantId = server.TenantId, PublicCode = code,
+            });
+
+            await rival.SaveChangesAsync();
+        };
+
+        try
+        {
+            var dto = Device(deviceId);
+            dto.PublicCode = code;
+
+            var device = Item("device", dto);
+
+            var root = await ReadAsync(await PostAsync(Batch(Guid.NewGuid(), device)));
+
+            Assert.Equal([false, true], server.TrySaveResults);
+
+            Assert.Equal("Rejected", StatusOf(root, device.OutboxId));
+            Assert.Equal(
+                "DuplicateDeviceCode",
+                ErrorOf(root, device.OutboxId).GetProperty("code").GetString());
+
+            var summary = root.GetProperty("summary");
+
+            Assert.Equal(0, summary.GetProperty("applied").GetInt32());
+            Assert.Equal(1, summary.GetProperty("rejected").GetInt32());
+        }
+        finally
+        {
+            server.BeforeTrySave = null;
+        }
     }
 
     // =================================================================
