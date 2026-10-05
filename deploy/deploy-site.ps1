@@ -49,6 +49,16 @@ if ($endpoint -notmatch ':\d+(/|$)')  { $endpoint = $endpoint -replace '^(https?
 if ($endpoint -notmatch 'msdeploy\.axd') { $endpoint = "$endpoint/msdeploy.axd?site=$($node.msdeploySite)" }
 
 $site = [string]$node.msdeploySite
+
+# TEST sites only. This script MIRRORS -Source onto the site: whatever is
+# not in the folder gets deleted. Given the production profile by mistake,
+# it would wipe the live app. Production goes through deploy-web.ps1
+# (DoNotDeleteRule) - see CUTOVER.md. A new test site is added here on purpose.
+$TestSites = @('site96162', 'site96163')
+if ($TestSites -notcontains $site) {
+    throw "deploy-site.ps1 deploys to the TEST sites only ($($TestSites -join ', ')), not '$site'."
+}
+
 $user = [string]$node.userName
 $pw   = [string]$node.userPWD
 if ([string]::IsNullOrWhiteSpace($pw)) { throw "The profile has no password (userPWD)." }
@@ -69,7 +79,6 @@ $msArgs = @(
     "-source:contentPath=$Source",
     "-dest:$dest",
     '-enableRule:AppOffline',
-    '-allowUntrusted',
     '-retryAttempts:3',
     # The host keeps its HTTPS certificate challenge files in .well-known.
     # A mirror sync would delete them (the first dry run showed exactly that),

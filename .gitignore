@@ -25,3 +25,7 @@ TestResults/
 *.PublishSettings
 *.publishsettings
 deploy/*.generated.config
+
+# A web.config with real values must never land in this public repo. The
+# committed ones are named api.web.config.template and dashboard.web.config.
+web.config
