@@ -108,4 +108,26 @@ public static class DeviceNaming
 
         return space < 0 ? IsOemCodeToken(text) : IsOemCodeToken(text[..space]);
     }
+
+    /// <summary>
+    /// الاسم ده <b>بادئ</b> بكود مصنّع وبعده كلام؟ — <b>حارس التنضيف</b>.
+    ///
+    /// <para>🔴 <b>دي <c>StartsWithOemCode</c> بتاعة القديم بالحرف</b>
+    /// (<c>SearchTextBackfill.cs:211</c>)، واللي تنضيف الإقلاع بيمسح بيها
+    /// الأسامي المتخزّنة. وهي <b>أضيق</b> من <see cref="IsOemCodeName"/>:
+    /// بتشترط مسافة، فكلمة واحدة كلها كود مابتتمسحش.</para>
+    ///
+    /// <para>⚠️ <b>وماينفعش نوحّدهم.</b> التنضيف بيمسح قيم موجودة على
+    /// صفوف الإنتاج — توسيعه معناه إننا بنمسح حاجات القديم سابها، والقديم
+    /// هو العقد. والكتابة الجديدة متحمية بـ<see cref="IsOemCodeName"/>
+    /// الأوسع، فمفيش قيمة جديدة بتعدّي.</para>
+    /// </summary>
+    public static bool StartsWithOemCode(string? name)
+    {
+        string text = (name ?? "").Trim();
+
+        int space = text.IndexOf(' ');
+
+        return space > 0 && IsOemCodeToken(text[..space]);
+    }
 }

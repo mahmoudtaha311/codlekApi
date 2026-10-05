@@ -200,43 +200,18 @@ public sealed class IngestReportsCommandHandler(
     {
         var evidence = await reports.ModelEvidenceAsync(device.Id, ct);
 
-        if (evidence.Count == 0) return false;
+        // ⚠️ القاعدة نفسها في مكان واحد — صيانة الإقلاع بتستعملها كمان.
+        var next = CommercialModelHydration.Next(
+            new(device.CommercialModelName, device.CommercialModelSource, device.MachineType),
+            evidence);
 
-        int pick = CommercialModelEvidence.Pick(
-            [.. evidence.Select(e => e.CommercialModelSource)],
-            [.. evidence.Select(e => e.CommercialModelName)]);
+        if (next is not { } values) return false;
 
-        // ⚠️ مفيش دليل موثوق ← الخام يفضل، ومابنلمسش حاجة.
-        if (pick < 0) return false;
+        device.CommercialModelName = values.Name;
+        device.CommercialModelSource = values.Source;
+        device.MachineType = values.MachineType;
 
-        var best = evidence[pick];
-        bool changed = false;
-
-        if (!string.Equals(
-                device.CommercialModelName, best.CommercialModelName, StringComparison.Ordinal))
-        {
-            device.CommercialModelName = best.CommercialModelName;
-            changed = true;
-        }
-
-        if (!string.Equals(
-                device.CommercialModelSource, best.CommercialModelSource,
-                StringComparison.Ordinal))
-        {
-            device.CommercialModelSource = best.CommercialModelSource;
-            changed = true;
-        }
-
-        // ⚠️ كود المصنع بيتملى بس لو موجود — مابنمسحش قيمة بفاضي.
-        if (!string.IsNullOrWhiteSpace(best.MachineType)
-            && !string.Equals(
-                   device.MachineType, best.MachineType, StringComparison.Ordinal))
-        {
-            device.MachineType = best.MachineType;
-            changed = true;
-        }
-
-        return changed;
+        return true;
     }
 
     /// <summary>
@@ -474,63 +449,17 @@ public sealed class IngestReportsCommandHandler(
 
         // مفيش معرّف: فحص قديم من قبل هوية الأجهزة، أو نسخة أقدم.
         // بنطابق بالمراسي — **ربط بس مش إنشاء**.
-        var matched = await TryMatchAsync(command.TenantId, dto.Specs, ct);
+        //
+        // ⚠️ المطابقة نفسها في مكان واحد — صيانة الإقلاع بتربط الفحوص
+        //    اليتيمة بنفس الدالة ونفس الاستعلام.
+        var matched = await DeviceAnchorMatch.TryMatchAsync(
+            dto.Specs,
+            (kind, value, token) => reports.DevicesByIdentifierAsync(
+                command.TenantId, kind, value, token),
+            ct);
 
         return matched is { } found
             ? new DeviceLink(found, false)
             : new DeviceLink(null, true);
     }
-
-    /// <summary>
-    /// بيدوّر على جهاز بمراسي فحص وصل من غير معرّف.
-    ///
-    /// <para>🔴 <b>وبنفس ترتيب القوة اللي على الراكة بالظبط.</b> أي
-    /// اختلاف بين الطرفين معناه إن <b>نفس اللاب بياخد هوية مختلفة
-    /// حسب مين اللي طابق</b>.</para>
-    /// </summary>
-    private async Task<Guid?> TryMatchAsync(
-        Guid tenantId, DeviceSpecsPayload specs, CancellationToken ct)
-    {
-        foreach (var kind in DeviceIdentityStrength.Order)
-        {
-            var values = kind == Core.Enums.DeviceIdentifierKind.DiskSerial
-
-                // ⚠️ كل الأقراص — أي واحد فيهم ممكن يكون المرساة.
-                ? specs.InternalDisks.Select(d => d.SerialNumber)
-
-                : [Probe(kind, specs)];
-
-            foreach (string value in values)
-            {
-                if (IdentityValues.IsPlaceholder(value)) continue;
-
-                string normalized = IdentityValues.Normalize(value);
-
-                if (normalized.Length == 0) continue;
-
-                var matches = await reports.DevicesByIdentifierAsync(
-                    tenantId, kind, normalized, ct);
-
-                /*
-                  🔴 **مرساة واحدة بتشاور على جهازين = عيب بيانات.**
-
-                  بنسيبه للمراجعة بدل ما نختار واحد عشوائي — والاختيار
-                  العشوائي هنا معناه فحص بيروح لجهاز غلط ومحدّش بيعرف.
-                */
-                if (matches.Count == 1) return matches[0];
-                if (matches.Count > 1) return null;
-            }
-        }
-
-        return null;
-    }
-
-    private static string Probe(
-        Core.Enums.DeviceIdentifierKind kind, DeviceSpecsPayload specs) => kind switch
-    {
-        Core.Enums.DeviceIdentifierKind.SystemUuid => specs.SystemUuid,
-        Core.Enums.DeviceIdentifierKind.BiosSerial => specs.SerialNumber,
-        Core.Enums.DeviceIdentifierKind.BoardSerial => specs.BoardSerial,
-        _ => "",
-    };
 }
