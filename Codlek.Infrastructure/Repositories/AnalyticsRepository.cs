@@ -541,12 +541,17 @@ public sealed class AnalyticsRepository(AppDbContext db) : IAnalyticsRepository
         Guid tenantId, CancellationToken ct = default)
     {
         /*
-          ⚠️ **النشط بس:** المدموج صفه بيفضل للتاريخ، وعدّه بيقول ١٠
-          لابات والحقيقة ٧ — نفس الغلط اللي الدمج اتعمل عشان
-          يصلّحه.
+          ⚠️ **كل اللي مش مدموج — زي القديم بالحرف (`ScopedActive`).**
+          المدموج صفه بيفضل للتاريخ، وعدّه بيقول ١٠ لابات والحقيقة ٧.
+
+          🔴 **بس «مش مدموج» مش «نشط».** المشتبه في تكراره والمتقاعد لسه
+          لابات حقيقية في الورشة. نسخة سابقة كانت بتعدّ النشط بس، فلاب
+          اتعلّم «مشتبه في تكراره» كان بيختفي من الجرد كله — والمشروعين
+          شغّالين على نفس القاعدة فترة التحويل، فنفس الشاشة كانت هتدّي
+          رقمين. اتلقط بتشغيل فحوص القديم على الجديد.
         */
         var devices = db.Devices.AsNoTracking()
-            .Where(d => d.TenantId == tenantId && d.Status == DeviceLifecycleStatus.Active);
+            .Where(d => d.TenantId == tenantId && d.Status != DeviceLifecycleStatus.Merged);
 
         var reports = db.Reports.AsNoTracking()
             .Where(r => r.TenantId == tenantId && !r.IsDeleted);

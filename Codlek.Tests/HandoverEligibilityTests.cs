@@ -259,6 +259,29 @@ public class HandoverEligibilityTests(HandoverDbFixture fixture)
         Assert.Empty(await new HandoverRepository(db).EligibleIdsAsync(tenant, [device.Id]));
     }
 
+    /// <summary>
+    /// 🔴 <b>المشتبه في تكراره والمتقاعد لسه بيتسلّموا — زي القديم
+    /// بالحرف.</b> القديم بيستبعد المدموج بس (<c>ScopedActive</c>)،
+    /// والمشروعين شغّالين على نفس القاعدة فترة التحويل: لو الجديد
+    /// أشدّ، نفس اللاب بيظهر في شاشة ويختفي من التانية. اتلقط بتشغيل
+    /// فحوص القديم على الجديد.
+    /// </summary>
+    [Theory]
+    [InlineData(DeviceLifecycleStatus.DuplicateSuspected)]
+    [InlineData(DeviceLifecycleStatus.Retired)]
+    public async Task A_non_merged_laptop_stays_eligible_whatever_its_status(
+        DeviceLifecycleStatus status)
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var device = NewDevice(db, tenant, "DV-" + (int)status, status: status);
+
+        await db.SaveChangesAsync();
+
+        Assert.Equal([device.Id], await new HandoverRepository(db).EligibleIdsAsync(tenant, [device.Id]));
+    }
+
     [Fact]
     public async Task Another_tenant_laptop_is_never_eligible()
     {

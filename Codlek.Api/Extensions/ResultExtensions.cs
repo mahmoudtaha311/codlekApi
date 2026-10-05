@@ -35,6 +35,26 @@ public static class ResultExtensions
                 [result.Error.Code] = [result.Error.Description],
             };
 
+        /*
+          🔴 **`message` — اللي اللوحة بتقراه فعلاً.**
+
+          اللوحة بتطلّع رسالة الخطأ من `parsed.message` (زي ما القديم
+          بيرجّع `{ message }`)، ومن غير الحقل ده كل رسالة عربي محدّدة
+          — «الكود ده اتفعّلت بيه محطة فعلاً» — كانت بتبقى «لم تنجح
+          العملية.» بعد التحويل. اتلقط بتشغيل فحوص القديم على الجديد.
+
+          ⚠️ وفي التحقق، الرسالة هي **أول خطأ محدّد** مش الوصف العام —
+          القديم كان بيرجّع «اسم المستخدم قصير» مش «البيانات فيها غلط».
+        */
+        problem.Extensions["message"] = MessageOf(result.Error);
+
         return new ObjectResult(problem) { StatusCode = statusCode };
     }
+
+    /// <summary>الرسالة اللي بتتعرض للمستخدم — <b>الأكثر تحديداً</b>.</summary>
+    public static string MessageOf(Error error) =>
+        error is ValidationError validation
+            ? validation.Errors.Values.SelectMany(m => m)
+                .FirstOrDefault(m => !string.IsNullOrWhiteSpace(m)) ?? error.Description
+            : error.Description;
 }

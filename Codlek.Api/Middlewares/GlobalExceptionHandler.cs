@@ -25,11 +25,16 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log)
             "عطل مامسكهوش حد في {Method} {Path} — {TraceId}",
             context.Request.Method, context.Request.Path, traceId);
 
+        const string Message = "في مشكلة في السيرفر. حاول تاني، ولو فضلت كلّم الدعم.";
+
         var problem = new ProblemDetails
         {
             Status = StatusCodes.Status500InternalServerError,
-            Title = "في مشكلة في السيرفر. حاول تاني، ولو فضلت كلّم الدعم.",
-            Extensions = { ["traceId"] = traceId },
+            Title = Message,
+
+            // ⚠️ `message` عشان اللوحة — نفس الحقل اللي `ToProblem`
+            //    بيحطّه. من غيره المستخدم بيشوف «لم تنجح العملية.»
+            Extensions = { ["traceId"] = traceId, ["message"] = Message },
         };
 
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;

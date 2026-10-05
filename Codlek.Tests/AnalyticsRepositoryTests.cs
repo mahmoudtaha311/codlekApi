@@ -658,6 +658,42 @@ public class AnalyticsRepositoryTests(AnalyticsDbFixture fixture)
     }
 
     /// <summary>
+    /// 🔴 <b>الجرد بيعدّ كل اللي مش مدموج</b> — المشتبه في تكراره
+    /// والمتقاعد لابات حقيقية لسه في الورشة. نسخة سابقة كانت بتعدّ
+    /// النشط بس، فلاب اتعلّم «مشتبه في تكراره» كان بيختفي من الجرد
+    /// والقديم بيعدّه — نفس الشاشة برقمين على نفس القاعدة.
+    /// </summary>
+    [Fact]
+    public async Task Only_merged_laptops_leave_the_inventory()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+
+        var suspected = NewDevice(db, tenant, "DV-SUSPECT");
+        var retired = NewDevice(db, tenant, "DV-RETIRED");
+        var merged = NewDevice(db, tenant, "DV-MERGED");
+
+        suspected.Status = DeviceLifecycleStatus.DuplicateSuspected;
+        retired.Status = DeviceLifecycleStatus.Retired;
+        merged.Status = DeviceLifecycleStatus.Merged;
+
+        await db.SaveChangesAsync();
+
+        var at = DateTime.UtcNow.AddDays(-1);
+
+        NewReport(db, tenant, at, deviceId: suspected.Id);
+        NewReport(db, tenant, at, deviceId: retired.Id);
+        NewReport(db, tenant, at, deviceId: merged.Id);
+
+        await db.SaveChangesAsync();
+
+        var summary = await new AnalyticsRepository(db).InventoryAsync(tenant);
+
+        Assert.Equal(2, summary.Total);
+        Assert.Equal(2, summary.Healthy);
+    }
+
+    /// <summary>
     /// 🔴 «سليم» = <b>آخر</b> فحص مفيهوش فشل ولا خطأ — نفس تعريف
     /// شاشة التسليم بالحرف، عشان الرقمين يطابقوا بعض.
     /// </summary>

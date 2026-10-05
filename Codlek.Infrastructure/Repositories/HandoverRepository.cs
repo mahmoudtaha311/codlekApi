@@ -32,7 +32,7 @@ public sealed class HandoverRepository(AppDbContext db) : IHandoverRepository
             .Where(r => r.TenantId == tenantId && !r.IsDeleted);
 
         return db.Devices.AsNoTracking()
-            .Where(d => d.TenantId == tenantId && d.Status == DeviceLifecycleStatus.Active)
+            .Where(d => d.TenantId == tenantId && d.Status != DeviceLifecycleStatus.Merged)
 
             // ⚠️ واللي عمره ما اتفحص مابيظهرش — مفيش فحص ≠ سليم.
             .Where(d => reports.Any(r => r.DeviceId == d.Id))

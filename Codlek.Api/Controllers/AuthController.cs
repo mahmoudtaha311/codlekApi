@@ -4,6 +4,8 @@ using Codlek.Application.Contracts.Auth;
 using Codlek.Application.Features.Auth.Login;
 using Codlek.Application.Features.Auth.Logout;
 using Codlek.Application.Features.Auth.Refresh;
+using Codlek.Application.Interfaces;
+using Codlek.Core.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -68,13 +70,17 @@ public sealed class AuthController(ISender sender) : ControllerBase
     /// </summary>
     [HttpGet("me")]
     [Authorize]
-    public IActionResult Me() => Ok(new
-    {
-        UserId = User.FindFirstValue("sub"),
-        DisplayName = User.FindFirstValue("display"),
-        Code = User.FindFirstValue("code"),
-        Role = User.FindFirstValue(ClaimTypes.Role),
-        TenantId = User.FindFirstValue("tenant"),
-        MustChangePassword = User.FindFirst("must") is not null,
-    });
+    [ProducesResponseType<MeResponse>(StatusCodes.Status200OK)]
+    public IActionResult Me([FromServices] ICurrentUser me) => Ok(new MeResponse(
+        me.Id,
+        me.TenantId,
+        User.FindFirstValue(ClaimTypes.Name) ?? "",
+        me.DisplayName,
+        me.Code,
+        me.Role.ToString(),
+        UserRoleText.Arabic(me.Role),
+        me.IsManagerOrAbove,
+        me.IsOwner,
+        me.IsRepairApprover,
+        User.FindFirst("must") is not null));
 }
