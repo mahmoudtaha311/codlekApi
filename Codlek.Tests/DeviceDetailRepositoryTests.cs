@@ -819,23 +819,40 @@ public class DeviceDetailRepositoryTests(DeviceDetailDbFixture fixture)
     }
 
     /// <summary>
-    /// ⚠️ «ماتعملتش» على صف الفحص هو العمود المخزّن.
+    /// 🔴 <b>«مااتنفذش» على صف الفحص بيتعدّ من المراحل، مش العمود.</b>
+    ///
+    /// <para>زي فحص قديم قبل ٢١-٩-٢٠٢٦: العمود المخزّن صفر (اتضاف
+    /// بـ<c>defaultValue: 0</c> من غير backfill) والمراحل فيها ٣ بـ
+    /// <c>Status == 0</c>. لو الإسقاط رجع للعمود، الرقم هيبقى صفر والشارة
+    /// هتختفي — والفحص ده يقع. والمراحل التانية (١ و٢ و٣) مابتتعدّش.</para>
     /// </summary>
     [Fact]
-    public async Task The_test_row_carries_the_stored_not_run_count()
+    public async Task The_test_row_counts_not_run_from_the_steps_not_the_stored_column()
     {
         using var db = fixture.Create();
         var tenant = NewTenant(db);
         var device = NewDevice(db, tenant, "DV-NOTRUN");
 
-        var report = NewReport(db, tenant, device.Id, DateTime.UtcNow);
-        report.NotRunCount = 4;
+        var report = NewReport(db, tenant, device.Id, DateTime.UtcNow, steps: 6);
+        report.NotRunCount = 0;
+
+        var statuses = new[] { 0, 1, 0, 2, 3, 0 };
+        int i = 0;
+        foreach (var step in report.Steps) step.Status = statuses[i++];
+
+        // ⚠️ فحص تاني بمراحل كلها مش صفر وعمود متخزّن بـ٧ — عشان
+        //    نتأكد إن العدّ لكل فحص لوحده ومش بيقرا العمود.
+        var other = NewReport(db, tenant, device.Id, DateTime.UtcNow.AddHours(-1), steps: 2);
+        other.NotRunCount = 7;
+        foreach (var step in other.Steps) step.Status = 1;
 
         await db.SaveChangesAsync();
 
         var (rows, _) = await new DeviceRepository(db).TestsAsync(tenant, device.Id, 1, 25);
 
-        Assert.Equal(4, Assert.Single(rows).NotRunCount);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(3, rows.Single(r => r.ReportId == report.Id).NotRunCount);
+        Assert.Equal(0, rows.Single(r => r.ReportId == other.Id).NotRunCount);
     }
 
     // =================================================================

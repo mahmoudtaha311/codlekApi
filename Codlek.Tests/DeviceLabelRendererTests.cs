@@ -8,8 +8,12 @@ namespace Codlek.Tests;
 /// <para>🔴 <b>النصوص المتوقّعة هنا متولّدة من
 /// <c>CodlekWeb/Services/DeviceQr.cs</c> نفسه</b> (نفس المكتبة
 /// <c>Net.Codecrete.QrCodeGenerator</c> 3.2.1). الليبلات المطبوعة من
-/// الشاشة القديمة ملزوقة على لابات؛ أي فرق في النسخة أو مستوى التصحيح
-/// أو الهامش بيطلّع رمز تاني لنفس الكود — والفحص ده هو اللي بيقول.</para>
+/// الشاشة القديمة ملزوقة على لابات؛ أي فرق في النسخة أو الهامش بيطلّع
+/// رمز تاني لنفس الكود — والفحص ده هو اللي بيقول.</para>
+///
+/// <para>⚠️ مستوى التصحيح المطلوب مش متثبّت هنا: المكتبة بتعلّيه لوحدها
+/// (boostEcl)، فالأكواد دي بتطلع High بحجم ٢١ سواء طلبنا Low أو Medium أو
+/// High. <c>Medium</c> في الرسّام هو الحد الأدنى بس.</para>
 ///
 /// <para>⚠️ <b>لو الفحص ده وقع بعد ترقية المكتبة: ماتحدّثش النص
 /// المتوقّع.</b> رجّع النسخة المثبّتة، أو اسأل الأول لو الليبلات
@@ -58,6 +62,31 @@ public class DeviceLabelRendererTests
     [InlineData("   ")]
     public void An_empty_code_is_refused(string code) =>
         Assert.Throws<ArgumentException>(() => new QrDeviceLabelRenderer().Svg(code));
+
+    /// <summary>
+    /// ⚠️ <b>بيثبّت الحقيقة اللي التعليقات بتقولها</b>: المكتبة بتعلّي
+    /// مستوى التصحيح لوحدها، فكود الـ١١ حرف بيطلع High بحجم ٢١ مهما كان
+    /// المستوى المطلوب — يعني الـgolden مش بيحرس المستوى. لو الفحص ده وقع
+    /// بعد ترقية، التعليقات في <c>QrDeviceLabelRenderer</c> محتاجة مراجعة.
+    /// </summary>
+    [Theory]
+    [InlineData("LP-00000001")]
+    [InlineData("LP-00018425")]
+    public void The_library_boosts_the_correction_level_to_high_for_a_label_code(string code)
+    {
+        foreach (var requested in new[]
+                 {
+                     Net.Codecrete.QrCodeGenerator.QrCode.Ecc.Low,
+                     Net.Codecrete.QrCodeGenerator.QrCode.Ecc.Medium,
+                     Net.Codecrete.QrCodeGenerator.QrCode.Ecc.High,
+                 })
+        {
+            var qr = Net.Codecrete.QrCodeGenerator.QrCode.EncodeText(code, requested);
+
+            Assert.Equal(Net.Codecrete.QrCodeGenerator.QrCode.Ecc.High, qr.ErrorCorrectionLevel);
+            Assert.Equal(21, qr.Size);
+        }
+    }
 
     private static string Golden(string code) => code switch
     {

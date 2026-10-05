@@ -497,7 +497,14 @@ public sealed class DeviceRepository(AppDbContext db) : IDeviceRepository
                 r.SkipCount,
                 r.Steps.Count,
                 r.GeneralNote,
-                r.NotRunCount))
+
+                // 🔴 «مااتنفذش» بيتعدّ من المراحل وقت العرض (Status == 0)،
+                //    زي تاب القديم بالظبط — مش العمود Report.NotRunCount.
+                //    العمود اتضاف بـdefaultValue: 0 ومااتملاش للفحوص اللي
+                //    قبل ٢١-٩-٢٠٢٦، فكان هيطلّع صفر وتختفي الشارة من كل
+                //    فحص قديم. والتحويل للعمود مستني قرار صاحب الشغل +
+                //    backfill من RawJson للصفوف القديمة.
+                r.Steps.Count(s => s.Status == 0)))
             .ToListAsync(ct);
 
         return (rows, total);

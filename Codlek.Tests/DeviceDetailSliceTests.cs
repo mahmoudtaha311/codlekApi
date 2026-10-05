@@ -891,11 +891,12 @@ public class DeviceDetailSliceTests
     }
 
     /// <summary>
-    /// ⚠️ <b>«ماتعملتش» من العمود المخزّن على الفحص</b> — نفس رقم صفحة
-    /// الفحص وقايمة الفحوص لنفس الفحص.
+    /// ⚠️ <b>«مااتنفذش» بيعدّي من صف المستودع زي ما هو</b> — والمستودع
+    /// بيعدّه من المراحل (<c>Status == 0</c>) زي تاب القديم؛ المعالج
+    /// مابيحسبش ولا بيقرا العمود المخزّن.
     /// </summary>
     [Fact]
-    public async Task The_not_run_count_is_the_stored_report_column()
+    public async Task The_not_run_count_passes_through_from_the_repository_row()
     {
         var (repo, me, device) = Build();
 
