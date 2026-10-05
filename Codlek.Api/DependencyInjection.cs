@@ -135,15 +135,61 @@ public static class DependencyInjection
                 */
                 o.Events = new JwtBearerEvents
                 {
-                    OnTokenValidated = context =>
+                    OnTokenValidated = async context =>
                     {
                         string? use = context.Principal?
                             .FindFirst(JwtTokenIssuer.TokenUseClaim)?.Value;
 
                         if (use != JwtTokenIssuer.AccessUse)
+                        {
                             context.Fail("ده مش توكن وصول.");
+                            return;
+                        }
 
-                        return Task.CompletedTask;
+                        /*
+                          🔴 **الحساب لسه مسموحله؟ — في كل طلب، زي القديم.**
+
+                          التوقيع بيثبت إن التوكن بتاعنا، مش إن صاحبه لسه
+                          شغّال. من غير السطور دي، المالك يوقف حساب لابتوبه
+                          اتسرق والتاب المفتوح يفضل يصدّر المخزن ربع ساعة.
+                          القديم كان بيطرده من أول طلب (`CookieSessionGuard`).
+
+                          ⚠️ **هنا ومش في وسيط بعد التحقق:** الوسيط ممكن
+                          يتحط في الترتيب الغلط أو يتشال. هنا التوكن نفسه
+                          بيبقى مرفوض — فكل `[Authorize]` بترد `401` بنفس
+                          شكل التوكن المنتهي، واللوحة بتعرف تتعامل معاه.
+
+                          ⚠️ **ومسارات الراكة مابتعدّيش هنا:** هي بمفتاح
+                          في ترويسة لوحدها مش `Bearer`، فمفيش توكن يتقرا.
+                        */
+                        var principal = context.Principal!;
+
+                        bool readable =
+                            Guid.TryParse(principal.FindFirst(
+                                System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value,
+                                out Guid userId)
+                            & Guid.TryParse(principal.FindFirst("tenant")?.Value, out Guid tenant)
+                            & int.TryParse(principal.FindFirst(JwtTokenIssuer.VersionClaim)?.Value,
+                                System.Globalization.NumberStyles.Integer,
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                out int version);
+
+                        if (!readable)
+                        {
+                            context.Fail("التوكن ناقص بيانات الحساب.");
+                            return;
+                        }
+
+                        var services = context.HttpContext.RequestServices;
+
+                        bool allowed = await services
+                            .GetRequiredService<AccountStanding>()
+                            .AllowsAsync(
+                                services.GetRequiredService<Codlek.Infrastructure.Data.AppDbContext>(),
+                                userId, tenant, version, context.HttpContext.RequestAborted);
+
+                        if (!allowed)
+                            context.Fail("الحساب اتوقف أو بياناته اتغيّرت.");
                     },
                 };
             });

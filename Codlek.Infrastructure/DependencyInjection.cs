@@ -61,6 +61,17 @@ public static class DependencyInjection
         services.AddScoped<ILoginEventLog, LoginEventLog>();
         services.AddScoped<ILoginSessions, LoginSessions>();
 
+        /*
+          🔴 **سينجلتون — وده شرط مش تفضيل.**
+
+          الكاش والعدّاد اللي جوّاه لازم يبقوا واحد على السيرفر كله: لو
+          اتعمل نسخة لكل طلب، `Forget` من طلب الإيقاف بتمسح كاش محدش
+          بيقرا منه، والطرد يرجع ياخد عمر الكاش.
+        */
+        services.AddMemoryCache();
+        services.AddSingleton<AccountStanding>();
+        services.AddSingleton<IAccountStanding>(sp => sp.GetRequiredService<AccountStanding>());
+
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IAuditTrail, AuditTrail>();
 

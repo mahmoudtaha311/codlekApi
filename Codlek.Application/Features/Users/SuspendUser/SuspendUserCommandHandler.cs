@@ -23,7 +23,8 @@ public sealed class SuspendUserCommandHandler(
     ILoginSessions sessions,
     IAuditTrail audit,
     IUnitOfWork unitOfWork,
-    ICurrentUser me)
+    ICurrentUser me,
+    IAccountStanding standing)
     : IRequestHandler<SuspendUserCommand, Result<UserAccountResult>>
 {
     public async Task<Result<UserAccountResult>> Handle(
@@ -74,6 +75,9 @@ public sealed class SuspendUserCommandHandler(
             $"اتوقف حساب «{target.DisplayName}» — {reason}");
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 🔴 بعد الحفظ — شوف IAccountStanding.Forget.
+        standing.Forget(target.Id);
 
         return Result.Success(
             new UserAccountResult(target.Id, target.DisplayName, target.Code));

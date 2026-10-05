@@ -117,7 +117,8 @@ public class UserPasswordResetTests(UserPasswordResetDbFixture fixture)
             sp.GetRequiredService<ILoginSessions>(),
             sp.GetRequiredService<IAuditTrail>(),
             sp.GetRequiredService<IUnitOfWork>(),
-            sp.GetRequiredService<ICurrentUser>());
+            sp.GetRequiredService<ICurrentUser>(),
+            sp.GetRequiredService<IAccountStanding>());
 
         return await handler.Handle(new ResetUserPasswordCommand(userId, password), CancellationToken.None);
     }

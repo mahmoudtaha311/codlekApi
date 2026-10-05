@@ -63,7 +63,8 @@ public sealed class AccountController(ISender sender) : ControllerBase
     /// <para>🔴 التغيير بيقفل كل الجلسات (بما فيها بتاعة الجهاز ده)،
     /// فالتوكنات الجديدة في الرد هي اللي بتخلّي اللي غيّر يفضل داخل.
     /// <b>والواجهة لازم تستبدل اللي عندها بيهم</b> — لو سابت القديم،
-    /// المستخدم بيتطرد بعد ١٥ دقيقة.</para>
+    /// المستخدم بيتطرد من أول طلب بعدها (النسخة اتغيّرت — شوف
+    /// <c>AccountStanding</c>).</para>
     /// </summary>
     [HttpPost("change-password")]
     [ProducesResponseType<PasswordChangedResponse>(StatusCodes.Status200OK)]

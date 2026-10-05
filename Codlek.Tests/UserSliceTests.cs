@@ -97,6 +97,13 @@ public class UserSliceTests
             Entries.Add((action, summary));
     }
 
+    private sealed class FakeStanding : IAccountStanding
+    {
+        public List<Guid> Forgotten { get; } = [];
+
+        public void Forget(Guid userId) => Forgotten.Add(userId);
+    }
+
     private sealed class FakeUnitOfWork : IUnitOfWork
     {
         public async Task<bool> TrySaveChangesAsync(CancellationToken ct = default)
@@ -133,12 +140,13 @@ public class UserSliceTests
         var audit = new FakeAudit();
         var unitOfWork = new FakeUnitOfWork();
         var me = new FakeUser(myRole);
+        var standing = new FakeStanding();
 
         return new Harness(
             repository, sessions, audit, unitOfWork,
             new GetUsersQueryHandler(repository, me),
-            new SuspendUserCommandHandler(repository, sessions, audit, unitOfWork, me),
-            new ActivateUserCommandHandler(repository, audit, unitOfWork, me));
+            new SuspendUserCommandHandler(repository, sessions, audit, unitOfWork, me, standing),
+            new ActivateUserCommandHandler(repository, audit, unitOfWork, me, standing));
     }
 
     private static ApplicationUser Row(

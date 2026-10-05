@@ -21,6 +21,7 @@ public sealed class ChangePasswordCommandHandler(
     UserManager<ApplicationUser> users,
     ILoginSessions sessions,
     ICurrentUser me,
+    IAccountStanding standing,
     ILogger<ChangePasswordCommandHandler> log)
     : IRequestHandler<ChangePasswordCommand, Result<PasswordChangedResponse>>
 {
@@ -111,6 +112,10 @@ public sealed class ChangePasswordCommandHandler(
                 CredentialVersion: user.CredentialVersion,
                 MustChangePassword: false),
             cancellationToken);
+
+        // 🔴 بعد الحفظ — شوف IAccountStanding.Forget. والتوكن الجديد اللي
+        // راجع في الرد على النسخة الجديدة، فبيعدّي من أول طلب.
+        standing.Forget(user.Id);
 
         log.LogInformation(
             "الباسورد اتغيّر — {UserId}، واتقفلت {Count} جلسة.", user.Id, closed);
