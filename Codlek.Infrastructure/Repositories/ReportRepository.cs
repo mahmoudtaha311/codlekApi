@@ -127,6 +127,33 @@ public sealed class ReportRepository(AppDbContext db) : IReportRepository
             .Include(r => r.Parts)
             .FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantId, ct);
 
+    /// <summary>
+    /// 🔴 <b>متتبَّع — من غير <c>AsNoTracking</c> — ومن غير المراحل
+    /// والقطع.</b> المسح والاسترجاع بيغيّروا أعمدة في الصف نفسه وبس.
+    /// </summary>
+    public Task<Report?> FindForUpdateAsync(
+        Guid tenantId, Guid id, CancellationToken ct = default) =>
+        db.Reports.FirstOrDefaultAsync(r => r.Id == id && r.TenantId == tenantId, ct);
+
+    public Task<bool> ExistsAsync(Guid tenantId, Guid id, CancellationToken ct = default) =>
+        db.Reports.AsNoTracking().AnyAsync(r => r.Id == id && r.TenantId == tenantId, ct);
+
+    /// <summary>
+    /// 🔴 <b>جدول التعديلات مافيهوش عمود شركة — فالشرط بيعدّي على
+    /// الفحص.</b> الشرط ده جوّه الاستعلام نفسه، مش فلتر في الذاكرة
+    /// بعد ما الصفوف تتجاب.
+    /// </summary>
+    public async Task<IReadOnlyList<ReportEdit>> EditsAsync(
+        Guid tenantId, Guid reportId, CancellationToken ct = default) =>
+        await db.Edits.AsNoTracking()
+            .Where(e => e.ReportId == reportId && e.Report!.TenantId == tenantId)
+
+            // ⚠️ الأحدث فوق زي القديم — وفاصل تعادل: الراكة بتبعت كذا
+            // تعديل بنفس اللحظة.
+            .OrderByDescending(e => e.AtUtc)
+            .ThenByDescending(e => e.Id)
+            .ToListAsync(ct);
+
     public Task<int> SnapshotComponentCountAsync(
         Guid tenantId, Guid reportId, CancellationToken ct = default) =>
         db.SnapshotComponents.AsNoTracking()
@@ -152,7 +179,13 @@ public sealed class ReportRepository(AppDbContext db) : IReportRepository
                        AS ApplicationVersion,
                    CASE WHEN ISJSON(RawJson) = 1
                         THEN JSON_VALUE(RawJson, '$.TestDefinitionVersion') END
-                       AS TestDefinitionVersion
+                       AS TestDefinitionVersion,
+                   CASE WHEN ISJSON(RawJson) = 1
+                        THEN JSON_VALUE(RawJson, '$.CompletedByTechnicianName') END
+                       AS CompletedByName,
+                   CASE WHEN ISJSON(RawJson) = 1
+                        THEN JSON_VALUE(RawJson, '$.CompletedByTechnicianCode') END
+                       AS CompletedByCode
               FROM Reports
              WHERE TenantId = @tenant AND Id = @id
             """;

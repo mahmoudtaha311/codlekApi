@@ -111,6 +111,19 @@ public static class AuditActions
 
     public const string RackRevoked = "rack.revoked";
 
+    // =================================================================
+    //  الفحوص
+    // =================================================================
+
+    /// <summary>
+    /// ⚠️ <b>الاتنين دول مش موجودين في القديم.</b> القديم كان بيمسح
+    /// ويرجّع من غير سطر سجل — الصف الممسوح نفسه هو السجل. نوع الكيان
+    /// <c>"Report"</c> بحرف كبير زي <c>"Device"</c>.
+    /// </summary>
+    public const string ReportDeleted = "report.deleted";
+
+    public const string ReportRestored = "report.restored";
+
     /*
       🔴 **التلاتة اللي تحت مفيش حاجة في المشروع الجديد بتكتبهم —
       لحد دلوقتي — ومع ذلك لازم يكونوا هنا.**

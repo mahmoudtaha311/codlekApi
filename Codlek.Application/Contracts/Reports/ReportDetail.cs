@@ -18,6 +18,17 @@ namespace Codlek.Application.Contracts.Reports;
 /// ⚠️ عدد قطع لقطة العتاد — <c>0</c> معناها إن الفحص ده مالوش
 /// لقطة، والشاشة بتخفي تبويب العتاد.
 /// </param>
+/// <param name="CompletedByName">
+/// ⚠️ <b>مين سلّم — ممكن يبقى غير اللي بدأ</b>، لأن الوردية بتتغيّر
+/// في نص الفحص. بتتقرا من الحمولة الخام زي النسخ، والناقصة بترجع
+/// <b>فاضي</b> (مش «غير متاح»): القديم كان بيخفي سطر «سلّمه» لما
+/// تبقى فاضية <b>أو</b> نفس اسم الفني، والشاشة بتعمل نفس الحاجة.
+/// </param>
+/// <param name="RestoredByName">
+/// ⚠️ <b>الاسترجاع مابيمسحش بيانات المسح.</b> فحص ممسوح ورجع بيبقى
+/// فيه الاتنين مع بعض — <c>IsDeleted = false</c> وسبب المسح لسه
+/// موجود — والشاشة بتعرض «اتمسح … واترجع …».
+/// </param>
 public sealed record ReportDetail(
     Guid Id,
     Guid? DeviceId,
@@ -25,6 +36,8 @@ public sealed record ReportDetail(
     Guid? TechnicianId,
     string TechnicianName,
     string TechnicianCode,
+    string CompletedByName,
+    string CompletedByCode,
     string RackCode,
     string RackName,
     DateTime StartedAtUtc,
@@ -40,6 +53,9 @@ public sealed record ReportDetail(
     string DeletedReason,
     string DeletedByName,
     DateTime? DeletedAtUtc,
+    string RestoredByName,
+    string RestoredReason,
+    DateTime? RestoredAtUtc,
     string ApplicationVersion,
     string TestDefinitionVersion,
     int SnapshotComponentCount,

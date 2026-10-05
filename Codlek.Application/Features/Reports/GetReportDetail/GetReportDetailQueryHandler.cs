@@ -74,6 +74,17 @@ public sealed class GetReportDetailQueryHandler(
             TechnicianId: r.TechnicianId,
             TechnicianName: r.TechnicianName,
             TechnicianCode: r.TechnicianCode,
+
+            /*
+              ⚠️ **الناقصة هنا فاضي، مش «غير متاح».**
+
+              القديم كان بيخفي سطر «سلّمه» لما تبقى فاضية أو نفس اسم
+              الفني. «غير متاح» كانت هتطلّع السطر على كل فحص قديم من
+              قبل الحقل ده.
+            */
+            CompletedByName: versions?.CompletedByName ?? "",
+            CompletedByCode: versions?.CompletedByCode ?? "",
+
             RackCode: rack.Code,
             RackName: rack.Name,
             StartedAtUtc: r.StartedAtUtc,
@@ -129,6 +140,11 @@ public sealed class GetReportDetailQueryHandler(
             DeletedReason: r.DeletedReason,
             DeletedByName: r.DeletedByName,
             DeletedAtUtc: r.DeletedAtUtc,
+
+            // ⚠️ الاسترجاع مابيمسحش بيانات المسح — الاتنين بيترجعوا.
+            RestoredByName: r.RestoredByName,
+            RestoredReason: r.RestoredReason,
+            RestoredAtUtc: r.RestoredAtUtc,
 
             // ⚠️ الناقصة بترجع «غير متاح» — زيها زي أي قيمة ناقصة.
             ApplicationVersion: Text(versions?.ApplicationVersion),

@@ -134,6 +134,17 @@ public class ExportFilterParityTests
         public Task<Report?> FindDetailAsync(Guid t, Guid id, CancellationToken ct = default) =>
             Task.FromResult<Report?>(null);
 
+        // ⚠️ التصدير مابيلمسش المسح والتعديلات — اتضافوا عشان الواجهة اتوسّعت.
+        public Task<Report?> FindForUpdateAsync(Guid t, Guid id, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> ExistsAsync(Guid t, Guid id, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ReportEdit>> EditsAsync(
+            Guid t, Guid reportId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<int> SnapshotComponentCountAsync(
             Guid t, Guid reportId, CancellationToken ct = default) =>
             Task.FromResult(0);
