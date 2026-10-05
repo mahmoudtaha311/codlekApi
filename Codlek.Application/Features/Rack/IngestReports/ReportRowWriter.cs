@@ -150,20 +150,41 @@ public static class ReportRowWriter
         row.BatteryService = ReportIngestRules.Blank(dto.BatteryService, 30);
         row.Disassembly = ReportIngestRules.Blank(dto.Disassembly, 120);
 
-        row.IsDeleted = dto.IsDeleted;
-        row.DeletedReason = TextClip.To(dto.DeletedReason, 400);
-        row.DeletedByName = TextClip.To(dto.DeletedByName, 120);
+        /*
+          🔴 **حالة المسح قرار واحد — وبتتكتب بس لو قرار الراكة أحدث.**
 
-        row.DeletedAtUtc = dto.DeletedAtUtc.HasValue
+          المسح والاسترجاع من الموقع بيحصلوا على السيرفر بس، والراكة
+          لسه شايلة الفحص «مش ممسوح». القديم كان بينسخ حالة الراكة هنا
+          مع كل إعادة إرسال متغيّرة — فمسح المدير **كان بيتلغي في صمت**
+          أول ما الفني يعدّل أي حاجة في الفحص.
+
+          ⚠️ والخانات السبعة بتتكتب مع بعض أو بتفضل مع بعض: «ممسوح»
+          من الموقع وسببه من الراكة كان هيبقى فحص بقصتين.
+
+          ⚠️ والإضافة مش محتاجة فرع لوحدها: الصف الجديد مالوش قرار،
+          فالقاعدة بترجّع «الراكة تكسب» وحالتها بتتكتب زي الأول.
+          والتفاصيل في `ReportIngestRules.RackDeletionWins`.
+        */
+        DateTime? rackDeletedAt = dto.DeletedAtUtc.HasValue
             ? ReportIngestRules.Utc(dto.DeletedAtUtc.Value)
             : null;
 
-        row.RestoredByName = TextClip.To(dto.RestoredByName, 120);
-        row.RestoredReason = TextClip.To(dto.RestoredReason, 400);
-
-        row.RestoredAtUtc = dto.RestoredAtUtc.HasValue
+        DateTime? rackRestoredAt = dto.RestoredAtUtc.HasValue
             ? ReportIngestRules.Utc(dto.RestoredAtUtc.Value)
             : null;
+
+        if (ReportIngestRules.RackDeletionWins(
+                row.DeletedAtUtc, row.RestoredAtUtc, rackDeletedAt, rackRestoredAt))
+        {
+            row.IsDeleted = dto.IsDeleted;
+            row.DeletedReason = TextClip.To(dto.DeletedReason, 400);
+            row.DeletedByName = TextClip.To(dto.DeletedByName, 120);
+            row.DeletedAtUtc = rackDeletedAt;
+
+            row.RestoredByName = TextClip.To(dto.RestoredByName, 120);
+            row.RestoredReason = TextClip.To(dto.RestoredReason, 400);
+            row.RestoredAtUtc = rackRestoredAt;
+        }
 
         row.ImportedFrom = TextClip.To(dto.ImportedFrom, 200);
 
