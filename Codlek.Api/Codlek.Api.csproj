@@ -5,6 +5,17 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>codlek-api</UserSecretsId>
+
+    <!--
+      🔴 النشر ممنوع يولّد web.config — زي القديم بالحرف.
+
+      الـweb.config اللي على المستضيف شايل متغيّرات البيئة: نص الاتصال
+      بقاعدة الإنتاج ومفتاح JWT. والـSDK بيولّد ملف فيه معالج ASP.NET Core
+      وبس — فأي نشر بيرفعه فوق اللي على السيرفر بيقطع القاعدة عن الموقع.
+      الخطة نبّهت على ده من الأول ("لازم IsTransformWebConfigDisabled
+      عليه زي القديم")، والسطر كان ناقص لحد مراجعة التحويل.
+    -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
   </PropertyGroup>
 
   <ItemGroup>
