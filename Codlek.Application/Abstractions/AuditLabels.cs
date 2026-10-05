@@ -59,6 +59,10 @@ public static class AuditLabels
             [AuditActions.RackResumed] = "إعادة تفعيل محطة فحص",
             [AuditActions.RackRevoked] = "إلغاء محطة فحص",
 
+            // ----------------------------------------- الفحوص
+            [AuditActions.ReportDeleted] = "مسح فحص",
+            [AuditActions.ReportRestored] = "استرجاع فحص ممسوح",
+
             /*
               ⚠️ **والتلاتة دول مفيش نقطة في المشروع الجديد بتكتبهم**
               — بس القديم بيكتبهم في **نفس القاعدة**، فصفوفهم معروضة

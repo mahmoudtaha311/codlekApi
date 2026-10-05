@@ -39,12 +39,33 @@ public interface IReportRepository
     /// </summary>
     Task<Report?> FindDetailAsync(Guid tenantId, Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    /// فحص واحد <b>للتعديل</b> (المسح والاسترجاع) — متتبَّع، ومن غير
+    /// المراحل والقطع.
+    ///
+    /// <para>⚠️ <b>وبيرجّع الممسوح كمان</b> — الاسترجاع بيشتغل عليه
+    /// هو بالذات.</para>
+    /// </summary>
+    Task<Report?> FindForUpdateAsync(Guid tenantId, Guid id, CancellationToken ct = default);
+
+    /// <summary>الفحص ده موجود في الشركة دي؟ — الممسوح موجود.</summary>
+    Task<bool> ExistsAsync(Guid tenantId, Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// تعديلات الفحص بعد التسليم — الأحدث فوق.
+    ///
+    /// <para>🔴 <b>جدول التعديلات مالوش عمود شركة</b> — فالتقييد
+    /// بالشركة بيعدّي على الفحص جوّه الاستعلام.</para>
+    /// </summary>
+    Task<IReadOnlyList<ReportEdit>> EditsAsync(
+        Guid tenantId, Guid reportId, CancellationToken ct = default);
+
     /// <summary>كام قطعة في لقطة عتاد الفحص ده.</summary>
     Task<int> SnapshotComponentCountAsync(
         Guid tenantId, Guid reportId, CancellationToken ct = default);
 
     /// <summary>
-    /// نسخ البرنامج وتعريف الفحوص — <b>من الحمولة الخام</b>.
+    /// نسخ البرنامج وتعريف الفحوص ومين سلّم — <b>من الحمولة الخام</b>.
     ///
     /// <para>🔴 <b>بـ<c>JSON_VALUE</c> في SQL، مش بقراية في
     /// الذاكرة.</b> الحمولة الخام حوالي <b>٢٠ كيلوبايت للفحص
