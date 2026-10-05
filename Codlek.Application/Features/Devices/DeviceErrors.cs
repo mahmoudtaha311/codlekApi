@@ -38,4 +38,32 @@ public static class DeviceErrors
     public static Error CodeNotFound(string code) =>
         new("device.code_not_found",
             $"مفيش لاب بالكود {code} — لا دلوقتي ولا قبل كده", 404);
+
+    // =================================================================
+    //  الملاحظات — رسايل القديم بالحرف (Pages/Devices/Details.cshtml.cs)
+    // =================================================================
+
+    public static readonly Error NoteEmpty =
+        new("device.note_empty", "اكتب الملاحظة الأول.", 400);
+
+    public static readonly Error NoteTooLong =
+        new("device.note_too_long",
+            $"الملاحظة أطول من {DeviceNoteRules.MaxLength} حرف.", 400);
+
+    // =================================================================
+    //  ليبل الـQR
+    // =================================================================
+
+    /// <summary>
+    /// اللاب لسه ماخدش كود عام — <b>فمفيش ليبل</b>.
+    ///
+    /// <para>🔴 <b>وده <c>404</c> مش رمز لسلسلة فاضية ولا للمعرّف
+    /// الداخلي.</b> الورقة دي بتتلزق على اللاب وبتعيش سنين؛ ورقة
+    /// بتدّعي هوية مش موجودة بتفضل ملزوقة بعد ما الكود الحقيقي
+    /// يوصل.</para>
+    /// </summary>
+    public static readonly Error NoPublicCode =
+        new("device.no_public_code",
+            "الجهاز لسه ماخدش كود عام، فمفيش ليبل دائم يتطبع. الكود بيتسجّل أول ما الراكة تزامن.",
+            404);
 }

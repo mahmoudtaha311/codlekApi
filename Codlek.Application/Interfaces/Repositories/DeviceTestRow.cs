@@ -21,4 +21,5 @@ public sealed record DeviceTestRow(
     int NotPresentCount,
     int SkipCount,
     int StepCount,
-    string GeneralNote);
+    string GeneralNote,
+    int NotRunCount);

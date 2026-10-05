@@ -736,4 +736,154 @@ public class DeviceDetailRepositoryTests(DeviceDetailDbFixture fixture)
         Assert.All(ordered, clause =>
             Assert.Contains("[Id]", clause, StringComparison.Ordinal));
     }
+
+    // =================================================================
+    //  نسخ البرنامج لتاب الفحوص
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>النسخ من الحمولة الخام لكل فحص في الصفحة — والبايظ مابيوقّعش
+    /// التاب.</b>
+    ///
+    /// <para><c>JSON_VALUE</c> على نص مش JSON سليم <b>بيرمي</b>؛
+    /// والحارس <c>ISJSON</c> هو اللي بيخلّي صف واحد بايظ يرجّع فاضي بدل
+    /// ما التاب كله يقع. والمستودع المزيّف مايقدرش يقيس ده.</para>
+    /// </summary>
+    [Fact]
+    public async Task The_test_versions_come_out_of_the_raw_payload_per_report()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+        var device = NewDevice(db, tenant, "DV-VER");
+
+        var full = NewReport(db, tenant, device.Id, DateTime.UtcNow.AddHours(-3));
+        full.RawJson = """{"ApplicationVersion":"2.4.1","TestDefinitionVersion":"7"}""";
+
+        var half = NewReport(db, tenant, device.Id, DateTime.UtcNow.AddHours(-2));
+        half.RawJson = """{"ApplicationVersion":"2.3.0"}""";
+
+        var broken = NewReport(db, tenant, device.Id, DateTime.UtcNow.AddHours(-1));
+        broken.RawJson = "{ this is not json at all";
+
+        await db.SaveChangesAsync();
+
+        var versions = await new DeviceRepository(db)
+            .TestVersionsAsync(tenant, [full.Id, half.Id, broken.Id]);
+
+        Assert.Equal(3, versions.Count);
+
+        Assert.Equal("2.4.1", versions[full.Id].ApplicationVersion);
+        Assert.Equal("7", versions[full.Id].TestDefinitionVersion);
+
+        Assert.Equal("2.3.0", versions[half.Id].ApplicationVersion);
+        Assert.Null(versions[half.Id].TestDefinitionVersion);
+
+        Assert.Null(versions[broken.Id].ApplicationVersion);
+        Assert.Null(versions[broken.Id].TestDefinitionVersion);
+    }
+
+    /// <summary>
+    /// 🔴 <b>مقيّدة بالشركة جوّه الاستعلام</b> — معرّف فحص شركة تانية
+    /// وسط معرّفات الصفحة مابيرجّعش نسخته.
+    /// </summary>
+    [Fact]
+    public async Task The_test_versions_are_tenant_scoped_inside_the_sql()
+    {
+        using var db = fixture.Create();
+        var mine = NewTenant(db);
+        var theirs = NewTenant(db);
+
+        var myDevice = NewDevice(db, mine, "DV-VER-M");
+        var theirDevice = NewDevice(db, theirs, "DV-VER-T");
+
+        var myReport = NewReport(db, mine, myDevice.Id, DateTime.UtcNow);
+        myReport.RawJson = """{"ApplicationVersion":"1.0"}""";
+
+        var theirReport = NewReport(db, theirs, theirDevice.Id, DateTime.UtcNow);
+        theirReport.RawJson = """{"ApplicationVersion":"سرّي"}""";
+
+        await db.SaveChangesAsync();
+
+        var versions = await new DeviceRepository(db)
+            .TestVersionsAsync(mine, [myReport.Id, theirReport.Id]);
+
+        Assert.Equal([myReport.Id], versions.Keys);
+    }
+
+    [Fact]
+    public async Task No_report_ids_means_no_query()
+    {
+        using var db = fixture.Create();
+
+        Assert.Empty(await new DeviceRepository(db).TestVersionsAsync(Guid.NewGuid(), []));
+    }
+
+    /// <summary>
+    /// ⚠️ «ماتعملتش» على صف الفحص هو العمود المخزّن.
+    /// </summary>
+    [Fact]
+    public async Task The_test_row_carries_the_stored_not_run_count()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+        var device = NewDevice(db, tenant, "DV-NOTRUN");
+
+        var report = NewReport(db, tenant, device.Id, DateTime.UtcNow);
+        report.NotRunCount = 4;
+
+        await db.SaveChangesAsync();
+
+        var (rows, _) = await new DeviceRepository(db).TestsAsync(tenant, device.Id, 1, 25);
+
+        Assert.Equal(4, Assert.Single(rows).NotRunCount);
+    }
+
+    // =================================================================
+    //  إضافة ملاحظة — للآخر على قاعدة حقيقية
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>الملاحظة بتتحفظ بالعربي سليم وبتظهر في القايمة والعدّاد.</b>
+    ///
+    /// <para>من المعالج للقاعدة بالمستودع الحقيقي ووحدة العمل الحقيقية:
+    /// المعرّف اللي في الرد هو معرّف الصف، والنص العربي راجع زي ما
+    /// اتكتب (عمود <c>nvarchar</c>)، والـ٢٠٠٠ حرف بيتحفظوا من غير قصّ.</para>
+    /// </summary>
+    [Fact]
+    public async Task An_added_note_round_trips_through_the_database()
+    {
+        using var db = fixture.Create();
+        var tenant = NewTenant(db);
+        var device = NewDevice(db, tenant, "DV-NOTE");
+
+        await db.SaveChangesAsync();
+
+        var me = new FakeCurrentUser { TenantId = tenant };
+        var repo = new DeviceRepository(db);
+        var handler = new Codlek.Application.Features.Devices.AddNote.AddDeviceNoteCommandHandler(
+            repo, new UnitOfWork(db), me);
+
+        var shortNote = await handler.Handle(
+            new(device.Id, "الشاشة مشروخة — اتسلّم للصيانة"), default);
+
+        var longNote = await handler.Handle(
+            new(device.Id, new string('ن', 2000)), default);
+
+        Assert.True(shortNote.IsSuccess);
+        Assert.True(longNote.IsSuccess);
+
+        using var fresh = fixture.Create();
+        var notes = await new DeviceRepository(fresh).NotesAsync(tenant, device.Id);
+
+        var saved = notes.Single(n => n.Id == shortNote.Value.Id);
+
+        Assert.Equal("الشاشة مشروخة — اتسلّم للصيانة", saved.Body);
+        Assert.Equal("كريم", saved.CreatedByName);
+        Assert.Equal(me.Id, saved.CreatedByUserId);
+
+        Assert.Equal(2000, notes.Single(n => n.Id == longNote.Value.Id).Body.Length);
+
+        var facts = await new DeviceRepository(fresh).DetailFactsAsync(tenant, device);
+        Assert.Equal(2, facts.NoteCount);
+    }
 }

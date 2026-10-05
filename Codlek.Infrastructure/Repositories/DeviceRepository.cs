@@ -1,9 +1,11 @@
+using System.Globalization;
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Devices;
 using Codlek.Core.Entities;
 using Codlek.Core.Enums;
 using Codlek.Core.Text;
 using Codlek.Infrastructure.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace Codlek.Infrastructure.Repositories;
@@ -494,7 +496,8 @@ public sealed class DeviceRepository(AppDbContext db) : IDeviceRepository
                 r.NotPresentCount,
                 r.SkipCount,
                 r.Steps.Count,
-                r.GeneralNote))
+                r.GeneralNote,
+                r.NotRunCount))
             .ToListAsync(ct);
 
         return (rows, total);
@@ -845,6 +848,56 @@ public sealed class DeviceRepository(AppDbContext db) : IDeviceRepository
             // لاب) بتاخد نفس الوقت بالحرف.
             .ThenByDescending(n => n.Id)
             .ToListAsync(ct);
+
+    public void AddNote(DeviceNote note) => db.DeviceNotes.Add(note);
+
+    /// <summary>
+    /// 🔴 <b><c>JSON_VALUE</c> في SQL، و<c>ISJSON</c> حارس إجباري</b> —
+    /// نفس استعلام القديم (<c>ReportRawFields.ForAsync</c>).
+    ///
+    /// <para>الحمولة الخام حوالي ٢٠ كيلوبايت للفحص، وصفحة فيها ٢٥ فحص
+    /// كانت هتسحب نص ميجا عشان كلمتين. و<c>JSON_VALUE</c> على نص مش
+    /// JSON سليم <b>بيرمي</b> — فصف واحد بايظ كان هيوقّع التاب كله.</para>
+    ///
+    /// <para>⚠️ <b>والمعرّفات وسائط، مش ملزوقة في النص.</b></para>
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, ReportVersionFacts>> TestVersionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> reportIds, CancellationToken ct = default)
+    {
+        var ids = reportIds.Distinct().ToList();
+
+        if (ids.Count == 0) return new Dictionary<Guid, ReportVersionFacts>();
+
+        var parameters = new List<SqlParameter> { new("@tenant", tenantId) };
+        var slots = new List<string>(ids.Count);
+
+        for (int i = 0; i < ids.Count; i++)
+        {
+            string name = "@id" + i.ToString(CultureInfo.InvariantCulture);
+            slots.Add(name);
+            parameters.Add(new SqlParameter(name, ids[i]));
+        }
+
+        string sql = $"""
+            SELECT Id AS ReportId,
+                   CASE WHEN ISJSON(RawJson) = 1
+                        THEN JSON_VALUE(RawJson, '$.ApplicationVersion') END
+                       AS ApplicationVersion,
+                   CASE WHEN ISJSON(RawJson) = 1
+                        THEN JSON_VALUE(RawJson, '$.TestDefinitionVersion') END
+                       AS TestDefinitionVersion
+              FROM Reports
+             WHERE TenantId = @tenant AND Id IN ({string.Join(", ", slots)})
+            """;
+
+        var rows = await db.Database
+            .SqlQueryRaw<ReportVersionRow>(sql, parameters.ToArray())
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(
+            r => r.ReportId,
+            r => new ReportVersionFacts(r.ApplicationVersion, r.TestDefinitionVersion));
+    }
 
     // =================================================================
     //  أسماء الصفحة — قراية واحدة لكل جدول

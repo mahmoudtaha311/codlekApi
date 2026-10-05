@@ -2,6 +2,7 @@ using Codlek.Application.Abstractions;
 using Codlek.Application.Contracts.Analytics;
 using Codlek.Application.Contracts.Common;
 using Codlek.Application.Contracts.Devices;
+using Codlek.Application.Features.Reports;
 using Codlek.Application.Interfaces;
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Paging;
@@ -48,6 +49,11 @@ public sealed class GetDeviceTestsQueryHandler(
         var racks = await devices.RackCodesAsync(
             me.TenantId, rows.Select(r => r.SourceRackId), cancellationToken);
 
+        // ⚠️ والنسخ كمان قراية واحدة للصفحة — ومن الحمولة الخام بـ
+        //    JSON_VALUE جوّه SQL، مش بسحب الحمولة (٢٠ كيلو للفحص).
+        var versions = await devices.TestVersionsAsync(
+            me.TenantId, rows.Select(r => r.ReportId).ToList(), cancellationToken);
+
         var items = rows.Select(r => new DeviceTestItem(
             r.ReportId,
             r.StartedAtUtc,
@@ -64,6 +70,14 @@ public sealed class GetDeviceTestsQueryHandler(
                 r.PassCount, r.FailCount, r.ErrorCount, r.NotPresentCount, r.SkipCount),
 
             r.StepCount,
+
+            // ⚠️ فحص مالوش صف في النسخ = «غير متاح»، زي القديم.
+            ReportVersionText.Display(
+                versions.GetValueOrDefault(r.ReportId)?.ApplicationVersion),
+            ReportVersionText.Display(
+                versions.GetValueOrDefault(r.ReportId)?.TestDefinitionVersion),
+
+            r.NotRunCount,
             r.GeneralNote)).ToList();
 
         return Result.Success(new PagedResult<DeviceTestItem>(

@@ -21,6 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="9.0.0" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
+    <!-- ⚠️ النسخة مثبّتة بالأقواس زي القديم (CodlekWeb.csproj): نسخة تانية ممكن ترسم رمز مختلف لنفس الكود، والليبلات المطبوعة ملزوقة على لابات. -->
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" Version="[3.2.1]" />
   </ItemGroup>
 
 </Project>

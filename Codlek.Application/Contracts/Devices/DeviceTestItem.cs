@@ -22,6 +22,20 @@ namespace Codlek.Application.Contracts.Devices;
 /// <para>⚠️ وفاضية في الغالبية العظمى من الفحوص القديمة — التاب
 /// لازم يفلتر الفاضي بدل ما يعرض صفوف فاضية.</para>
 /// </param>
+/// <param name="ApplicationVersion">
+/// نسخة برنامج الراكة اللي عملت الفحص — <b>من الحمولة الخام، مش
+/// عمود</b>. والناقصة «غير متاح»، بنفس كلمة صفحة الفحص.
+///
+/// <para>⚠️ <b>ده اللي بيجاوب «ليه الفحصين دول مختلفين»</b>: نفس
+/// اللاب اتفحص بنسختين وقايمة المراحل اتغيّرت بينهم.</para>
+/// </param>
+/// <param name="TestDefinitionVersion">نسخة تعريف الفحوص — نفس القاعدة.</param>
+/// <param name="NotRunCount">
+/// ⚠️ <b>من العمود المخزّن على الفحص</b> — نفس رقم صفحة الفحص وقايمة
+/// الفحوص. صفحة القديم كانت بتعدّه من المراحل وقت العرض وبتحسب
+/// مراحل مالهاش نتيجة (زي التسليم)، فكان ممكن يطلع أكبر من نفس الرقم
+/// في صفحة الفحص لنفس الفحص.
+/// </param>
 public sealed record DeviceTestItem(
     Guid ReportId,
     DateTime StartedAtUtc,
@@ -33,4 +47,7 @@ public sealed record DeviceTestItem(
     string RackCode,
     TestCounts Counts,
     int StepCount,
+    string ApplicationVersion,
+    string TestDefinitionVersion,
+    int NotRunCount,
     string GeneralNote = "");

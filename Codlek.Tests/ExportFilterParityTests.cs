@@ -91,6 +91,13 @@ public class ExportFilterParityTests
             Guid t, Guid id, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<DeviceNote>>([]);
 
+        public void AddNote(DeviceNote note) { }
+
+        public Task<IReadOnlyDictionary<Guid, ReportVersionFacts>> TestVersionsAsync(
+            Guid t, IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, ReportVersionFacts>>(
+                new Dictionary<Guid, ReportVersionFacts>());
+
         public Task<(IReadOnlyList<DeviceTestRow> Rows, int TotalItems)> TestsAsync(
             Guid t, Guid id, int page, int size, CancellationToken ct = default) =>
             Task.FromResult<(IReadOnlyList<DeviceTestRow>, int)>(([], 0));

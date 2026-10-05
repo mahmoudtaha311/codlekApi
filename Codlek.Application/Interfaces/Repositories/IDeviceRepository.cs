@@ -193,6 +193,26 @@ public interface IDeviceRepository
     Task<IReadOnlyList<DeviceNote>> NotesAsync(
         Guid tenantId, Guid deviceId, CancellationToken ct = default);
 
+    /// <summary>
+    /// ملاحظة جديدة — <b>بتتضاف ومابتتحفظش</b>.
+    ///
+    /// <para>⚠️ الحفظ على <c>IUnitOfWork</c>، زي باقي المستودعات.</para>
+    /// </summary>
+    void AddNote(DeviceNote note);
+
+    /// <summary>
+    /// نسخ البرنامج لصفحة فحوص اللاب — <b>قراية واحدة للصفحة</b>.
+    ///
+    /// <para>🔴 <b>مقيّدة بالشركة جوّه الاستعلام نفسه</b> — مش بس
+    /// بالمعرّفات اللي اتبعتت. لو المنادي غلط في تجميعها، الشرط ده
+    /// لسه بيمنع قراية فحص شركة تانية.</para>
+    ///
+    /// <para>⚠️ والفحص اللي مالوش صف في الناتج (أو حمولته مش JSON
+    /// سليم) قيمه <c>null</c> — والمعالج بيعرضها «غير متاح».</para>
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, ReportVersionFacts>> TestVersionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> reportIds, CancellationToken ct = default);
+
     /// <summary>أسماء الجهات اللي في الصفحة — قراية واحدة.</summary>
     Task<IReadOnlyDictionary<Guid, string>> LocationNamesAsync(
         Guid tenantId, IEnumerable<Guid?> ids, CancellationToken ct = default);
