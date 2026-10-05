@@ -143,7 +143,7 @@ public sealed class RepairsController(ISender sender) : ControllerBase
     /// <c>ICurrentUser.IsRepairApprover</c>.
     /// </summary>
     [HttpPost("{id:guid}/assign")]
-    [Authorize(Policies.ManagerOrAbove)]
+    [Authorize(Policies.RepairAssigner)]
     [ProducesResponseType<RepairActionResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

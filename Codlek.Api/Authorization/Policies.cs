@@ -19,6 +19,9 @@ public static class Policies
     public const string RepairsViewer = "RepairsViewer";
     public const string RepairApprover = "RepairApprover";
 
+    /// <summary>إسناد أمر صيانة لفني — المديرين والمحاسب.</summary>
+    public const string RepairAssigner = "RepairAssigner";
+
     /// <summary>تسليم اللابات — مدير الدور والمالك بس.</summary>
     public const string HandoverAllowed = "HandoverAllowed";
 
@@ -48,6 +51,21 @@ public static class Policies
         options.AddPolicy(RepairApprover, p =>
             p.RequireClaim(ClaimTypes.Role,
                 nameof(UserRole.Accountant), nameof(UserRole.Owner)));
+
+        /*
+          🔴 **والإسناد للمديرين والمحاسب — دي الوحيدة اللي مش من القديم.**
+
+          قرار المالك (٥ أكتوبر): المحاسب بيوافق وبيرفض **وبيسند لفنيين
+          الصيانة**. في القديم الإسناد كان للمديرين بس. الإلغاء والفتح
+          والتجاوز فضلوا على `ManagerOrAbove` — المحاسب بيسند وبس.
+
+          ⚠️ وتعدية قيد الماركة مش من هنا: بتتقرا جوّه المعالج من
+          `IsRepairApprover` (المحاسب والمالك) — زي ما هي.
+        */
+        options.AddPolicy(RepairAssigner, p =>
+            p.RequireClaim(ClaimTypes.Role,
+                nameof(UserRole.Manager), nameof(UserRole.Owner),
+                nameof(UserRole.FloorManager), nameof(UserRole.Accountant)));
 
         // 🔴 **والتسليم لمدير الدور والمالك بس — مش لمدير المخزن.**
         options.AddPolicy(HandoverAllowed, p =>

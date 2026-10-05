@@ -141,6 +141,37 @@ public class PolicyMatrixTests
     }
 
     // =================================================================
+    //  RepairAssigner — الإسناد
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>الإسناد للمديرين والمحاسب.</b> قرار المالك (٥ أكتوبر):
+    /// المحاسب بيوافق وبيرفض <b>وبيسند لفنيين الصيانة</b>. القديم كان
+    /// الإسناد فيه للمديرين بس — ده فرق مقصود ومكتوب في <c>CUTOVER.md</c>.
+    ///
+    /// <para>⚠️ والفني لأ: الإسناد قرار على شغل غيره.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(UserRole.Owner, true)]
+    [InlineData(UserRole.Manager, true)]
+    [InlineData(UserRole.FloorManager, true)]
+    [InlineData(UserRole.Accountant, true)]
+    [InlineData(UserRole.Technician, false)]
+    public async Task RepairAssigner_membership_is_frozen(UserRole role, bool allowed) =>
+        Assert.Equal(allowed, await Allowed(role, Policies.RepairAssigner));
+
+    /// <summary>
+    /// ⚠️ <b>المحاسب بيسند — بس مابيفتحش ولا بيلغي.</b> الإسناد بس هو
+    /// اللي اتفتح له، والإلغاء فضل على <c>ManagerOrAbove</c>.
+    /// </summary>
+    [Fact]
+    public async Task The_accountant_assigns_but_does_not_cancel()
+    {
+        Assert.True(await Allowed(UserRole.Accountant, Policies.RepairAssigner));
+        Assert.False(await Allowed(UserRole.Accountant, Policies.ManagerOrAbove));
+    }
+
+    // =================================================================
     //  HandoverAllowed
     // =================================================================
 

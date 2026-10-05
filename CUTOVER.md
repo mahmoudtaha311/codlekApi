@@ -177,3 +177,4 @@ dotnet publish web\new-api\Codlek.Api\Codlek.Api.csproj -c Release -o publish-we
 | صف شركة تانية | ٤٠٠ | ٤٠٤ |
 | `/d/{code}` | `/Devices?scan=` | `/app/devices?scan=` |
 | رد خطأ | `{ message }` | `ProblemDetails` ومعاه `message` |
+| المحاسب يسند أمر صيانة لفني | لأ — المديرين بس | **آه** — قرار المالك (٥ أكتوبر). الفتح والإلغاء والتجاوز فضلوا للمديرين |

@@ -35,7 +35,8 @@ public class RepairsRouteGuardTests
         { nameof(RepairsController.Detail), "GET", "{id:guid}", Policies.RepairsViewer },
 
         { nameof(RepairsController.Open), "POST", "", Policies.ManagerOrAbove },
-        { nameof(RepairsController.Assign), "POST", "{id:guid}/assign", Policies.ManagerOrAbove },
+        // ⚠️ الوحيدة اللي اتغيّرت عن القديم — قرار المالك إن المحاسب يسند.
+        { nameof(RepairsController.Assign), "POST", "{id:guid}/assign", Policies.RepairAssigner },
         { nameof(RepairsController.Cancel), "POST", "{id:guid}/cancel", Policies.ManagerOrAbove },
 
         {
