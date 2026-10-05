@@ -484,4 +484,74 @@ public class IngestCoreRuleTests
         Assert.False(row.SnapshotIsPartial);
         Assert.Null(row.SnapshotCapturedAtUtc);
     }
+
+    // =================================================================
+    //  حالة المسح — الأحدث يكسب، والتعادل للصف
+    // =================================================================
+
+    private static readonly DateTime Early = new(2025, 1, 10, 9, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Late = new(2025, 1, 12, 9, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
+    /// 🔴 <b>المسح من الموقع أحدث من آخر قرار على الراكة ← الصف
+    /// يفضل.</b> ودي الحالة اللي كانت بتضيّع مسح المدير.
+    /// </summary>
+    [Fact]
+    public void A_newer_stored_decision_keeps_the_row()
+    {
+        // الصف اتمسح من الموقع متأخر، والراكة رجّعته بدري.
+        Assert.False(ReportIngestRules.RackDeletionWins(Late, null, null, Early));
+
+        // ⚠️ والوقت المتخزّن ممكن يبقى وقت استرجاع كمان.
+        Assert.False(ReportIngestRules.RackDeletionWins(Early, Late, Early, null));
+    }
+
+    [Fact]
+    public void A_newer_rack_decision_wins()
+    {
+        Assert.True(ReportIngestRules.RackDeletionWins(Early, null, Late, null));
+
+        // ⚠️ الأحدث بين الاتنين هو اللي بيتقارن — مش وقت المسح لوحده.
+        Assert.True(ReportIngestRules.RackDeletionWins(Early, null, Early, Late));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>الصف مالوش قرار ← الراكة تكسب حتى لو هي كمان مالهاش.</b>
+    /// ودي حالة الإضافة: حالة الراكة بتتكتب زي الأول.
+    /// </summary>
+    [Fact]
+    public void No_stored_decision_takes_the_rack_state()
+    {
+        Assert.True(ReportIngestRules.RackDeletionWins(null, null, Late, null));
+        Assert.True(ReportIngestRules.RackDeletionWins(null, null, null, null));
+    }
+
+    /// <summary>
+    /// 🔴 <b>الراكة مالهاش قرار ← مابتمسحش قرار الموقع.</b> «مش
+    /// ممسوح» من غير وقت معناها «محدّش قرّر»، مش «اترجع».
+    /// </summary>
+    [Fact]
+    public void No_rack_decision_never_overrides_a_stored_one()
+    {
+        Assert.False(ReportIngestRules.RackDeletionWins(Early, null, null, null));
+        Assert.False(ReportIngestRules.RackDeletionWins(null, Early, null, null));
+    }
+
+    /// <summary>⚠️ <b>التعادل للصف</b> — نفس الوقت غالباً نفس القرار راجع.</summary>
+    [Fact]
+    public void Equal_times_keep_the_row()
+    {
+        Assert.False(ReportIngestRules.RackDeletionWins(Late, null, Late, null));
+        Assert.False(ReportIngestRules.RackDeletionWins(Early, Late, null, Late));
+    }
+
+    [Fact]
+    public void The_decision_time_is_the_later_of_delete_and_restore()
+    {
+        Assert.Null(ReportIngestRules.DeletionDecisionAt(null, null));
+        Assert.Equal(Early, ReportIngestRules.DeletionDecisionAt(Early, null));
+        Assert.Equal(Early, ReportIngestRules.DeletionDecisionAt(null, Early));
+        Assert.Equal(Late, ReportIngestRules.DeletionDecisionAt(Early, Late));
+        Assert.Equal(Late, ReportIngestRules.DeletionDecisionAt(Late, Early));
+    }
 }

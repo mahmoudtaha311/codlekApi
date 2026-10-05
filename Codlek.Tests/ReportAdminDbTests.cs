@@ -1,4 +1,6 @@
 using Codlek.Application.Abstractions;
+using Codlek.Application.Contracts.Sync;
+using Codlek.Application.Features.Rack.IngestReports;
 using Codlek.Application.Features.Reports;
 using Codlek.Application.Features.Reports.DeleteReport;
 using Codlek.Application.Features.Reports.GetReportEdits;
@@ -12,6 +14,7 @@ using Codlek.Core.Text;
 using Codlek.Infrastructure.Data;
 using Codlek.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Codlek.Tests;
 
@@ -386,5 +389,150 @@ public class ReportAdminDbTests(ReportAdminDbFixture fixture)
         var bad = await repo.VersionsAsync(tenant, broken.Id);
         Assert.NotNull(bad);
         Assert.Null(bad.CompletedByName);
+    }
+
+    // =================================================================
+    //  المسح من الموقع لازم يعيش بعد إعادة إرسال الراكة
+    // =================================================================
+
+    private static IngestReportsCommandHandler Ingest(AppDbContext db) =>
+        new(
+            new ReportIngestRepository(db),
+            new DeviceReference(db, NullLogger<DeviceReference>.Instance),
+            new UnitOfWork(db),
+            NullLogger<IngestReportsCommandHandler>.Instance);
+
+    private async Task<IngestResult> SendAsync(Guid tenantId, LaptopReportPayload dto)
+    {
+        await using var db = fixture.Create();
+
+        var result = await Ingest(db).Handle(
+            new IngestReportsCommand(tenantId, Guid.NewGuid(), [dto]), default);
+
+        Assert.True(result.IsSuccess);
+        return result.Value;
+    }
+
+    /// <summary>حمولة راكة لفحص مش ممسوح — بتاريخ قديم ثابت.</summary>
+    private static LaptopReportPayload RackReport() => new()
+    {
+        Id = Guid.NewGuid(),
+        StartedAtUtc = new DateTime(2025, 1, 10, 9, 0, 0),
+        DeviceCode = "LAP-0500",
+        TechnicianName = "أحمد الفني",
+        GeneralNote = "أول نسخة",
+        Specs = new DeviceSpecsPayload { Manufacturer = "HP", Model = "840" },
+    };
+
+    /// <summary>
+    /// 🔴 <b>المدير مسح الفحص من الموقع، والفني عدّل ملاحظة على الراكة
+    /// وهي بعتته تاني — الفحص لازم يفضل ممسوح بسبب المدير.</b>
+    ///
+    /// <para>الراكة لسه شايلة الفحص «مش ممسوح» ومن غير أي وقت مسح.
+    /// القديم كان بينسخ ده فوق الصف، فالفحص كان بيرجع للعدّ في صمت
+    /// وسبب المدير بيتمسح.</para>
+    ///
+    /// <para>⚠️ <b>وباقي الفحص بيتحدّث عادي</b> — الملاحظة والتعديلات
+    /// اللي جاية من الراكة بتنزل.</para>
+    /// </summary>
+    [Fact]
+    public async Task A_website_delete_survives_a_changed_resend_from_the_rack()
+    {
+        var tenant = await NewTenantAsync();
+        var dto = RackReport();
+
+        Assert.Equal(1, (await SendAsync(tenant, dto)).Added);
+
+        await using (var db = fixture.Create())
+        {
+            var deleted = await Delete(db, new Me(tenant, UserRole.Manager))
+                .Handle(new DeleteReportCommand(dto.Id, "الفحص اتعمل على لاب غلط"), default);
+
+            Assert.True(deleted.IsSuccess);
+        }
+
+        // ⚠️ نفس الحمولة بالظبط ← مابتتلمسش خالص (المسح أصلاً فاضل).
+        Assert.Equal(1, (await SendAsync(tenant, dto)).Unchanged);
+
+        dto.GeneralNote = "الفني عدّل الملاحظة";
+        dto.Edits =
+        [
+            new EditEntryPayload
+            {
+                AtUtc = new DateTime(2025, 1, 11, 9, 0, 0),
+                ByName = "أحمد الفني",
+                Field = "GeneralNote",
+                OldValue = "أول نسخة",
+                NewValue = "الفني عدّل الملاحظة",
+                Reason = "تصحيح",
+            },
+        ];
+
+        Assert.Equal(1, (await SendAsync(tenant, dto)).Updated);
+
+        await using var read = fixture.Create();
+        var saved = await read.Reports.AsNoTracking().SingleAsync(r => r.Id == dto.Id);
+
+        Assert.True(saved.IsDeleted);
+        Assert.Equal("الفحص اتعمل على لاب غلط", saved.DeletedReason);
+        Assert.Equal("صاحب الورشة", saved.DeletedByName);
+        Assert.NotNull(saved.DeletedAtUtc);
+
+        // باقي الفحص اتحدّث.
+        Assert.Equal("الفني عدّل الملاحظة", saved.GeneralNote);
+
+        var edit = Assert.Single(
+            await read.Edits.AsNoTracking().Where(e => e.ReportId == dto.Id).ToListAsync());
+
+        Assert.Equal("GeneralNote", edit.Field);
+        Assert.Equal("الفني عدّل الملاحظة", edit.NewValue);
+
+        Assert.Equal(0, await CountedAsync(tenant));
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والراكة اللي قرارها أحدث بتكسب.</b> المالك رجّع الفحص من
+    /// الموقع، وبعدها الفني مسحه على الراكة — المسح ده أحدث فبينزل
+    /// بحالته وسببه كاملين.
+    /// </summary>
+    [Fact]
+    public async Task A_later_delete_on_the_rack_still_wins()
+    {
+        var tenant = await NewTenantAsync();
+        var dto = RackReport();
+
+        await SendAsync(tenant, dto);
+
+        await using (var db = fixture.Create())
+        {
+            Assert.True((await Delete(db, new Me(tenant, UserRole.Manager))
+                .Handle(new DeleteReportCommand(dto.Id, "اتفحص مرتين"), default)).IsSuccess);
+        }
+
+        await using (var db = fixture.Create())
+        {
+            Assert.True((await Restore(db, new Me(tenant, UserRole.Owner))
+                .Handle(new RestoreReportCommand(dto.Id, "اتمسح بالغلط"), default)).IsSuccess);
+        }
+
+        var rackDeletedAt = DateTime.UtcNow.AddHours(1);
+
+        dto.IsDeleted = true;
+        dto.DeletedReason = "الفني مسحه على الراكة";
+        dto.DeletedByName = "أحمد الفني";
+        dto.DeletedAtUtc = rackDeletedAt;
+
+        Assert.Equal(1, (await SendAsync(tenant, dto)).Updated);
+
+        await using var read = fixture.Create();
+        var saved = await read.Reports.AsNoTracking().SingleAsync(r => r.Id == dto.Id);
+
+        Assert.True(saved.IsDeleted);
+        Assert.Equal("الفني مسحه على الراكة", saved.DeletedReason);
+        Assert.Equal("أحمد الفني", saved.DeletedByName);
+
+        // 🔴 القرار كله من الراكة — حتى بيانات الاسترجاع (الراكة مابعتتهاش).
+        Assert.Equal("", saved.RestoredReason);
+        Assert.Null(saved.RestoredAtUtc);
     }
 }

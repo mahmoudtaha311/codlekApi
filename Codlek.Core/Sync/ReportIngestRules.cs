@@ -169,4 +169,57 @@ public static class ReportIngestRules
     /// </summary>
     public static int NotRun(IEnumerable<(bool RequiresResult, int Status)> steps) =>
         steps.Count(s => s.RequiresResult && s.Status == 0);
+
+    // =================================================================
+    //  حالة المسح — قرار واحد، وقته آخر مسح أو استرجاع
+    // =================================================================
+
+    /// <summary>
+    /// وقت قرار المسح: الأحدث بين وقت المسح ووقت الاسترجاع.
+    /// <c>null</c> = محدّش قرّر حاجة خالص.
+    ///
+    /// <para>⚠️ <b>الخانات دي قرار واحد مش خانات منفصلة.</b>
+    /// <c>IsDeleted</c> ومين مسح وليه وإمتى ومين رجّع وليه وإمتى —
+    /// كلهم بيتكتبوا مع بعض أو بيفضلوا مع بعض. خلط نصّهم من الراكة
+    /// ونصّهم من الموقع بيدّي فحص «ممسوح» وسبب مسحه سبب حد تاني.</para>
+    /// </summary>
+    public static DateTime? DeletionDecisionAt(DateTime? deletedAtUtc, DateTime? restoredAtUtc)
+    {
+        if (deletedAtUtc is null) return restoredAtUtc;
+        if (restoredAtUtc is null) return deletedAtUtc;
+
+        return deletedAtUtc.Value >= restoredAtUtc.Value ? deletedAtUtc : restoredAtUtc;
+    }
+
+    /// <summary>
+    /// حالة المسح اللي جاية من الراكة تكسب حالة الصف المتخزّن؟
+    ///
+    /// <para>🔴 <b>بتكسب بس لو قرارها أحدث بالظبط.</b> المالك أو المدير
+    /// اللي مسح فحص من الموقع (<c>/reports/{id}/delete</c>) مسحه
+    /// <b>على السيرفر بس</b> — والراكة لسه شايلاه «مش ممسوح». فأول
+    /// مرة الراكة تعيد إرسال الفحص بعد أي تعديل، القديم كان بينسخ
+    /// حالتها فوق الصف، <b>والمسح بيتلغي في صمت</b>. ونفس الكلام
+    /// للاسترجاع.</para>
+    ///
+    /// <list type="bullet">
+    /// <item>الصف مالوش قرار ← الراكة تكسب. ودي حالة الإضافة كمان:
+    /// الصف الجديد فاضي، فحالة الراكة بتتكتب زي النهارده.</item>
+    /// <item>الراكة مالهاش قرار والصف ليه ← الصف يفضل.</item>
+    /// <item>الاتنين ليهم ← الأحدث يكسب.</item>
+    /// <item>⚠️ <b>والتعادل للصف.</b> نفس الوقت بالظبط غالباً هو نفس
+    /// القرار راجع تاني، ومفيش سبب نكتب فوق حاجة ماتغيّرتش.</item>
+    /// </list>
+    /// </summary>
+    public static bool RackDeletionWins(
+        DateTime? storedDeletedAtUtc, DateTime? storedRestoredAtUtc,
+        DateTime? rackDeletedAtUtc, DateTime? rackRestoredAtUtc)
+    {
+        var stored = DeletionDecisionAt(storedDeletedAtUtc, storedRestoredAtUtc);
+
+        if (stored is null) return true;
+
+        var rack = DeletionDecisionAt(rackDeletedAtUtc, rackRestoredAtUtc);
+
+        return rack is not null && rack.Value > stored.Value;
+    }
 }
