@@ -103,6 +103,10 @@ public static class DependencyInjection
         services.AddScoped<ITenantCounters, TenantCounters>();
         services.AddScoped<IDeviceWorkflowRecorder, DeviceWorkflowRecorder>();
 
+        // صيانة الإقلاع — راجع `StartupMaintenanceService`.
+        services.AddScoped<IMaintenanceRepository, MaintenanceRepository>();
+        services.AddScoped<IMaintenanceLock, MaintenanceLock>();
+
         return services;
     }
 

@@ -65,6 +65,18 @@ public static class DependencyInjection
 
         services.AddJwtAuthentication(configuration);
         services.AddValidationProblemShape();
+
+        /*
+          🔴 **صيانة الإقلاع — في الخلفية بعد ما السيرفر يبتدي يرد.**
+
+          القديم كان بيربط الفحوص اليتيمة ويعيد حساب «مشكوك إنه مكرر»
+          ويملأ الاسم التجاري مع كل تشغيل. من غيرها الحاجات دي بتفضل
+          على حالها للأبد. التفاصيل في `StartupMaintenanceService`.
+        */
+        services.Configure<Startup.StartupMaintenanceOptions>(
+            configuration.GetSection(Startup.StartupMaintenanceOptions.Section));
+        services.AddHostedService<Startup.StartupMaintenanceService>();
+
         return services;
     }
 

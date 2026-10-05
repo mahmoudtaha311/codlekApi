@@ -125,6 +125,26 @@ public class IngestCoreRuleTests
         Assert.Equal(expected, DeviceNaming.IsOemCodeName(name));
     }
 
+    /// <summary>
+    /// 🔴 <b>حارس التنضيف = <c>StartsWithOemCode</c> بتاعة القديم بالحرف</b>
+    /// — بيشترط مسافة، فالكلمة الواحدة اللي كلها كود <b>مابتتمسحش</b> (عكس
+    /// <c>IsOemCodeName</c>). التنضيف بيمسح قيم موجودة على الإنتاج،
+    /// وتوسيعه كان هيمسح حاجات القديم سابها.
+    /// </summary>
+    [Theory]
+    [InlineData("103C_5336AN HP EliteBook", true)]
+    [InlineData("  103C_5336AN HP EliteBook  ", true)]
+    [InlineData("103C_5336AN", false)]
+    [InlineData(" HP 103C_5336AN", false)]
+    [InlineData("EliteBook 840 G8", false)]
+    [InlineData("Legion 5 15ARH05", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void The_cleanup_guard_needs_a_code_followed_by_a_space_like_legacy(string? name, bool expected)
+    {
+        Assert.Equal(expected, DeviceNaming.StartsWithOemCode(name));
+    }
+
     // =================================================================
     //  مصادر الاسم التجاري
     // =================================================================
