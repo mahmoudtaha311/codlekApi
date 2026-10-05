@@ -23,7 +23,8 @@ public sealed class ResetUserPasswordCommandHandler(
     ILoginSessions sessions,
     IAuditTrail audit,
     IUnitOfWork unitOfWork,
-    ICurrentUser me)
+    ICurrentUser me,
+    IAccountStanding standing)
     : IRequestHandler<ResetUserPasswordCommand, Result<UserAccountResult>>
 {
     public async Task<Result<UserAccountResult>> Handle(
@@ -101,6 +102,9 @@ public sealed class ResetUserPasswordCommandHandler(
             $"اتغيّرت كلمة مرور «{target.DisplayName}»");
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 🔴 بعد الحفظ — شوف IAccountStanding.Forget.
+        standing.Forget(target.Id);
 
         return Result.Success(
             new UserAccountResult(target.Id, target.DisplayName, target.Code));

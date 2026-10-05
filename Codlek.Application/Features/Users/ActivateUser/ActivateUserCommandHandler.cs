@@ -19,7 +19,8 @@ public sealed class ActivateUserCommandHandler(
     IUserAccountRepository users,
     IAuditTrail audit,
     IUnitOfWork unitOfWork,
-    ICurrentUser me)
+    ICurrentUser me,
+    IAccountStanding standing)
     : IRequestHandler<ActivateUserCommand, Result<UserAccountResult>>
 {
     public async Task<Result<UserAccountResult>> Handle(
@@ -50,6 +51,9 @@ public sealed class ActivateUserCommandHandler(
             $"رجع حساب «{target.DisplayName}» للخدمة");
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 🔴 بعد الحفظ — شوف IAccountStanding.Forget.
+        standing.Forget(target.Id);
 
         return Result.Success(
             new UserAccountResult(target.Id, target.DisplayName, target.Code));
