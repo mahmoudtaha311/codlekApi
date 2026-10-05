@@ -744,6 +744,10 @@ public class RackBatchTests(RackBatchServer server) : IClassFixture<RackBatchSer
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
+        // ⚠️ والـ٥٠٠ فيه `message` زي باقي الأخطاء — اللوحة بتقراه.
+        var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(string.IsNullOrWhiteSpace(problem.GetProperty("message").GetString()));
+
         using var db = server.CreateDb();
 
         Assert.False(await db.Devices.AnyAsync(d => d.Id == deviceId));
