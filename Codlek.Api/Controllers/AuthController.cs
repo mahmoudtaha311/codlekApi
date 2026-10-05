@@ -29,7 +29,9 @@ public sealed class AuthController(ISender sender) : ControllerBase
         [FromBody] LoginRequest request, CancellationToken ct)
     {
         var result = await sender.Send(
-            new LoginCommand(request.Username, request.Password), ct);
+            new LoginCommand(
+                request.Username, request.Password,
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? ""), ct);
 
         return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
     }

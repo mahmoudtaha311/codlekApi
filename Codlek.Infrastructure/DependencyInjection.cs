@@ -58,6 +58,7 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddScoped<ITokenIssuer, JwtTokenIssuer>();
+        services.AddScoped<ILoginEventLog, LoginEventLog>();
         services.AddScoped<ILoginSessions, LoginSessions>();
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();

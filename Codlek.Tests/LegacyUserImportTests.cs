@@ -110,16 +110,26 @@ public class LegacyUserImportTests(LegacyUserImportDbFixture fixture)
         return await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id);
     }
 
-    private async Task<bool> LogsInAsync(string username, string password)
+    private async Task<bool> LogsInAsync(string username, string password, string ip = "")
     {
         using var services = fixture.BuildServices();
         using var scope = services.CreateScope();
 
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-        var result = await sender.Send(new LoginCommand(username, password));
+        var result = await sender.Send(new LoginCommand(username, password, ip));
 
         return result.IsSuccess;
+    }
+
+    private async Task<List<LoginEvent>> EventsAsync(string username)
+    {
+        using var db = fixture.Create();
+
+        return await db.LoginEvents.AsNoTracking()
+            .Where(e => e.Username == username)
+            .OrderBy(e => e.Id)
+            .ToListAsync();
     }
 
     // =================================================================
@@ -225,6 +235,91 @@ public class LegacyUserImportTests(LegacyUserImportDbFixture fixture)
         Assert.Equal(legacy.SuspendedAtUtc, row.SuspendedAtUtc);
 
         Assert.False(await LogsInAsync(name, Password));
+    }
+
+    // =================================================================
+    //  سجل الدخول وآخر دخول — زي القديم
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>الدخول الناجح بيختم «آخر دخول» وبيتسجّل بالـIP.</b> الجديد
+    /// كان بيقرا «آخر دخول» في صفحة المستخدمين ومابيكتبوش — يعني بعد
+    /// التحويل كان هيفضل واقف على تاريخ النقل لكل الناس.
+    /// </summary>
+    [Fact]
+    public async Task A_successful_login_stamps_the_time_and_is_recorded()
+    {
+        string name = Unique("stamp");
+
+        var legacy = await SeedLegacyAsync(name);
+        await ImportAsync();
+
+        var before = DateTime.UtcNow.AddSeconds(-5);
+
+        Assert.True(await LogsInAsync(name, Password, "203.0.113.7"));
+
+        var row = await IdentityRowAsync(legacy.Id);
+
+        Assert.NotNull(row!.LastLoginUtc);
+        Assert.True(row.LastLoginUtc >= before);
+
+        var entry = Assert.Single(await EventsAsync(name));
+
+        Assert.True(entry.Success);
+        Assert.Equal(legacy.TenantId, entry.TenantId);
+        Assert.Equal("203.0.113.7", entry.Ip);
+        Assert.Equal(legacy.DisplayName, entry.DisplayName);
+    }
+
+    /// <summary>
+    /// 🔴 <b>والفاشل بيتسجّل — بنفس كلام القديم.</b> ده الدليل الوحيد على
+    /// تخمين باسورد: اسم صح وباسورد غلط، واسم مش موجود أصلاً.
+    /// </summary>
+    [Fact]
+    public async Task Failed_logins_are_recorded_with_the_legacy_reasons()
+    {
+        string name = Unique("guess");
+
+        var legacy = await SeedLegacyAsync(name);
+        await ImportAsync();
+
+        Assert.False(await LogsInAsync(name, "WrongPass1", "198.51.100.9"));
+
+        var wrong = Assert.Single(await EventsAsync(name));
+
+        Assert.False(wrong.Success);
+        Assert.Equal(LoginCommandHandler.WrongCredentialsReason, wrong.Reason);
+        Assert.Equal(legacy.TenantId, wrong.TenantId);
+        Assert.Equal("198.51.100.9", wrong.Ip);
+
+        string ghost = Unique("ghost");
+
+        Assert.False(await LogsInAsync(ghost, "WrongPass1"));
+
+        var unknown = Assert.Single(await EventsAsync(ghost));
+
+        Assert.False(unknown.Success);
+        Assert.Equal(Guid.Empty, unknown.TenantId);
+        Assert.Equal(LoginCommandHandler.WrongCredentialsReason, unknown.Reason);
+
+        // ⚠️ والفاشل مابيختمش «آخر دخول».
+        Assert.Equal(legacy.LastLoginUtc, (await IdentityRowAsync(legacy.Id))!.LastLoginUtc);
+    }
+
+    [Fact]
+    public async Task A_suspended_login_is_recorded_as_suspended()
+    {
+        string name = Unique("held");
+
+        await SeedLegacyAsync(name, tweak: u => u.IsActive = false);
+        await ImportAsync();
+
+        Assert.False(await LogsInAsync(name, Password));
+
+        var entry = Assert.Single(await EventsAsync(name));
+
+        Assert.False(entry.Success);
+        Assert.Equal(LoginCommandHandler.SuspendedReason, entry.Reason);
     }
 
     // =================================================================
