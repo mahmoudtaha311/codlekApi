@@ -16,5 +16,5 @@ namespace Codlek.Application.Interfaces.Repositories;
 public sealed record ReportVersionFacts(
     string? ApplicationVersion,
     string? TestDefinitionVersion,
-    string? CompletedByName,
-    string? CompletedByCode);
+    string? CompletedByName = null,
+    string? CompletedByCode = null);
