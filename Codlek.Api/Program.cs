@@ -1,3 +1,4 @@
+using Codlek.Api.Dashboard;
 using Codlek.Api.Middlewares;
 using Codlek.Api.Racks;
 using Codlek.Api;
@@ -69,10 +70,15 @@ if (app.Environment.IsDevelopment())
   المخنوق مالوش يوصل لقراية قاعدة ولا لتحقق تشفيري. والترتيب ده
   هو اللي بيخلّي الحد حاجز حقيقي مش عدّاد بعد الواقعة.
 */
+app.UseDashboardAccess();
+
 app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 🔴 باسورد مؤقت = مفيش وصول غير لتغييره — شوف ForcedPasswordChangeGate.
+app.UseForcedPasswordChange();
 
 app.MapControllers();
 

@@ -1,3 +1,4 @@
+using Codlek.Api.Dashboard;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,7 +15,8 @@ namespace Codlek.Api.Controllers;
 /// </summary>
 [ApiController]
 [AllowAnonymous]
-public sealed class HealthController(IConfiguration config) : ControllerBase
+public sealed class HealthController(IConfiguration config, DashboardAddress dashboard)
+    : ControllerBase
 {
     /// <summary>
     /// 🔴 <b>«أنا اتنقلت» — الطريقة اللي الراكات بتلحق بيها نقلة
@@ -71,7 +73,11 @@ public sealed class HealthController(IConfiguration config) : ControllerBase
     /// <para>⚠️ <b>والكود بيتهرّب.</b> كود فيه مسافة أو
     /// <c>&amp;</c> كان بيكسر الرابط أو يضيف معامل مش موجود.</para>
     /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>اللوحة ممكن تبقى على موقع لوحدها</b> — <c>Server:DashboardBaseUrl</c>.
+    /// من غيره الـQR كان هيحوّل على <c>/app</c> على موقع السيرفر، واللوحة مش هناك.
+    /// </remarks>
     [HttpGet("d/{code}")]
     public IActionResult Scan(string code) =>
-        Redirect("/app/devices?scan=" + Uri.EscapeDataString(code));
+        Redirect(dashboard.Base + "/devices?scan=" + Uri.EscapeDataString(code));
 }

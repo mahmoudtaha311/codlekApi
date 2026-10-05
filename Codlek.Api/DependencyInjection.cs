@@ -1,3 +1,4 @@
+using Codlek.Api.Dashboard;
 using System.Text;
 using Codlek.Api.Authorization;
 using Codlek.Api.Extensions;
@@ -35,6 +36,9 @@ public static class DependencyInjection
         // 🔴 حدود الطلبات على سطح الراكة — ومعاها جسم ٤٢٩ مكتوب
         //    بالإيد، لأن الراكة بتقرا اللي يوصلها.
         services.AddRackRateLimiting(configuration);
+
+        // اللوحة على موقع لوحدها: عنوانها لرابط الـQR، ومين يكلّم السيرفر.
+        services.AddDashboardAccess(configuration);
 
         /*
           🔴 **إعدادات السيرفر اللي الراكة بتقراها.**
