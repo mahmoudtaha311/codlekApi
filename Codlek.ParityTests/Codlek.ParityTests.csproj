@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Parity check: the legacy CodlekWeb.Tests HTTP suite, compiled as-is,
+    run against the NEW API (Codlek.Api) on a database prepared exactly
+    like production: the legacy app boots once (migrations + seeding),
+    then the cutover steps run (baseline row + new migrations, including
+    the legacy user import), then the new API serves every request.
+
+    Only three files are replaced (TestServer, RackFixture, RateLimitTests):
+    they wire servers, never assertions. Every [Fact] is the legacy one.
+
+    Deliberately NOT in CodlekApi.sln: mutation sweeps build and test the
+    solution, and this suite is slow and expected to have known gaps.
+    Run it explicitly:
+      dotnet build Codlek.ParityTests/Codlek.ParityTests.csproj -m:1
+      dotnet test  Codlek.ParityTests/Codlek.ParityTests.csproj (with the no-build switch)
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>CodlekWeb.Tests</RootNamespace>
+    <!-- The legacy app opens its internals to an assembly with this exact name (Xlsx, ApiV1 helpers). -->
+    <AssemblyName>CodlekWeb.Tests</AssemblyName>
+    <!-- The legacy files compile with their own warnings; they are not ours to fix here. -->
+    <NoWarn>$(NoWarn);CS8600;CS8602;CS8603;CS8604;CS8618;CS8619;CS8620;CS8625;CS0618;xUnit1031;xUnit2013</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Legacy app: seeding control plane + the types the legacy tests use. -->
+    <ProjectReference Include="..\..\CodlekWeb\CodlekWeb.csproj" />
+
+    <!-- New app: the system under test. Aliased because both define a global Program. -->
+    <ProjectReference Include="..\Codlek.Api\Codlek.Api.csproj" Aliases="newapi" />
+  </ItemGroup>
+
+  <!--
+    Compile ORDER matters: xunit runs the classes of a collection in the
+    order the compiler emits them, and the legacy suite has a hidden
+    dependency on that order - RateLimitTests generates device codes
+    (LP-8200xxxx, LP-8300xxxx) that collide with codes OperationalSyncTests
+    and OfflineAuthorisationWindowTests hard-code. In the legacy project
+    RateLimitTests.cs compiles after them alphabetically; here the legacy
+    files go first and the replacements last, so the run order matches.
+  -->
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\CodlekWeb.Tests\*.cs"
+             Exclude="..\..\CodlekWeb.Tests\TestServer.cs;..\..\CodlekWeb.Tests\RackFixture.cs;..\..\CodlekWeb.Tests\RateLimitTests.cs"
+             LinkBase="Legacy" />
+    <Compile Include="ParityLog.cs;TestServer.cs;RackFixture.cs;RateLimitTests.cs" />
+  </ItemGroup>
+
+</Project>
