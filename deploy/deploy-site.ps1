@@ -70,7 +70,11 @@ $msArgs = @(
     "-dest:$dest",
     '-enableRule:AppOffline',
     '-allowUntrusted',
-    '-retryAttempts:3'
+    '-retryAttempts:3',
+    # The host keeps its HTTPS certificate challenge files in .well-known.
+    # A mirror sync would delete them (the first dry run showed exactly that),
+    # and the certificate renewal would fail weeks later with no visible cause.
+    '-skip:objectName=dirPath,absolutePath=\.well-known'
 )
 
 if (-not $IncludeWebConfig) {
