@@ -123,7 +123,7 @@ public sealed class CreateUserCommandHandler(
 
         if (!created.Succeeded)
         {
-            string reason = string.Join(" ", created.Errors.Select(e => e.Description));
+            string reason = IdentityErrorText.Of(created.Errors, identity.Options.Password);
             return Result.Failure<UserAccountResult>(UserErrors.PasswordRejected(reason));
         }
 

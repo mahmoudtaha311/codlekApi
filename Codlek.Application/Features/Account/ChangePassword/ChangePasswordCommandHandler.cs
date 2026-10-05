@@ -65,7 +65,7 @@ public sealed class ChangePasswordCommandHandler(
 
         if (!result.Succeeded)
         {
-            string reason = string.Join(" ", result.Errors.Select(Describe));
+            string reason = IdentityErrorText.Of(result.Errors, users.Options.Password);
 
             log.LogWarning("تغيير باسورد مرفوض: {Reason} — {UserId}.", reason, user.Id);
 
@@ -121,25 +121,4 @@ public sealed class ChangePasswordCommandHandler(
             pair.RefreshToken,
             pair.ExpiresInSeconds));
     }
-
-    /// <summary>
-    /// رسالة Identity بالعربي.
-    ///
-    /// <para>⚠️ رسايل Identity بالإنجليزي («Passwords must be at least
-    /// 8 characters»). والمستخدم هنا بيقرا عربي — فالرسالة الإنجليزية
-    /// بتبان كأنها عطل مش توجيه.</para>
-    /// </summary>
-    private static string Describe(IdentityError error) => error.Code switch
-    {
-        "PasswordTooShort" => "كلمة المرور الجديدة قصيرة أوي.",
-        "PasswordRequiresDigit" => "كلمة المرور لازم يكون فيها رقم.",
-        "PasswordRequiresLower" => "كلمة المرور لازم يكون فيها حرف صغير.",
-        "PasswordRequiresUpper" => "كلمة المرور لازم يكون فيها حرف كبير.",
-        "PasswordRequiresUniqueChars" => "كلمة المرور حروفها مكررة أوي.",
-        "PasswordMismatch" => "كلمة المرور الحالية غلط.",
-
-        // ⚠️ أي كود مش معروف بيرجع بنصه الإنجليزي بدل ما يتاكل.
-        // رسالة وحشة أهون من رسالة فاضية.
-        _ => error.Description,
-    };
 }

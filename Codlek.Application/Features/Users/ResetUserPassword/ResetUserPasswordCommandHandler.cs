@@ -38,19 +38,44 @@ public sealed class ResetUserPasswordCommandHandler(
                 UserErrors.Forbidden(UserManagementRules.DenialReason(me.Id, target.Id)));
 
         /*
+          🔴 **الباسورد الجديد بيتفحص الأول — وبعدين القديم يتشال.**
+
+          `RemovePasswordAsync` بيحفظ على طول، وفحص القوة (الطول) جوّه
+          `AddPasswordAsync`. فلما كانوا ورا بعض من غير الفحص ده، باسورد
+          قصير كان بيسيب الحساب **من غير باسورد خالص**: المدير يشوف
+          «اترفض»، وصاحب الحساب مابيدخلش بأي باسورد لحد ما حد يعيد
+          التعيين تاني. واللوحة كانت بتقبل ٤ حروف. اتلقط في فحص نسخة
+          التجربة على بيانات حقيقية (٥ أكتوبر).
+
+          ⚠️ والفحص بنفس `PasswordValidators` اللي Identity بتشغّلها — يعني
+          نفس `IdentityOptions.Password`. القواعد لسه في مكان واحد.
+        */
+        var weak = new List<IdentityError>();
+
+        foreach (var validator in identity.PasswordValidators)
+            weak.AddRange((await validator.ValidateAsync(identity, target, command.Password)).Errors);
+
+        if (weak.Count > 0)
+            return Result.Failure<UserAccountResult>(UserErrors.PasswordRejected(
+                IdentityErrorText.Of(weak, identity.Options.Password)));
+
+        /*
           ⚠️ **المدير مايعرفش باسورد الحساب التاني**، فـ
           `ChangePasswordAsync` (اللي بتطلب القديم) مش مناسبة.
           `RemovePassword` + `AddPassword` بتعمل نفس الحاجة وبتعدّي
           على نفس قواعد القوة ونفس البصمة المسجَّلة.
         */
-        await identity.RemovePasswordAsync(target);
+        var removed = await identity.RemovePasswordAsync(target);
+
+        if (!removed.Succeeded)
+            return Result.Failure<UserAccountResult>(UserErrors.PasswordRejected(
+                IdentityErrorText.Of(removed.Errors, identity.Options.Password)));
+
         var added = await identity.AddPasswordAsync(target, command.Password);
 
         if (!added.Succeeded)
-        {
-            string reason = string.Join(" ", added.Errors.Select(e => e.Description));
-            return Result.Failure<UserAccountResult>(UserErrors.PasswordRejected(reason));
-        }
+            return Result.Failure<UserAccountResult>(UserErrors.PasswordRejected(
+                IdentityErrorText.Of(added.Errors, identity.Options.Password)));
 
         target.MustChangePassword = true;
 
