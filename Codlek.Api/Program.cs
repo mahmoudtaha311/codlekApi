@@ -72,6 +72,9 @@ if (app.Environment.IsDevelopment())
 */
 app.UseDashboardAccess();
 
+// ⚠️ قبل الحد — اسم المستخدم جزء من مفتاح حدّ دخول اللوحة.
+app.UseLoginNameCapture();
+
 app.UseRateLimiter();
 
 app.UseAuthentication();

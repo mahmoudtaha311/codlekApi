@@ -17,6 +17,12 @@ public sealed class RateLimitOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>تسجيل محطة — عشر محاولات في خمس دقايق.</summary>
+    /// <summary>
+    /// دخول اللوحة — لكل (IP + اسم المستخدم المطبَّع). <b>نفس اسم القديم
+    /// ونفس أرقامه</b>، فإعداد <c>RateLimits:WebLogin</c> بيشتغل على الاتنين.
+    /// </summary>
+    public Window WebLogin { get; set; } = new() { Permit = 10, WindowSeconds = 300 };
+
     public Window RackRegister { get; set; } = new() { Permit = 10, WindowSeconds = 300 };
 
     /// <summary>دخول الفني — عشر محاولات في خمس دقايق.</summary>
@@ -50,6 +56,7 @@ public sealed class RateLimitOptions
 /// </summary>
 public static class RackRateLimits
 {
+    public const string WebLogin = "web-login";
     public const string RackRegister = "rack-register";
     public const string TechnicianLogin = "technician-login";
     public const string RackApi = "rack-api";
@@ -100,7 +107,7 @@ public static class RackRateLimits
 
             if (!options.Enabled)
             {
-                foreach (string name in new[] { RackRegister, TechnicianLogin, RackApi })
+                foreach (string name in new[] { WebLogin, RackRegister, TechnicianLogin, RackApi })
                     limiter.AddPolicy(name, _ => RateLimitPartition.GetNoLimiter("disabled"));
 
                 return;
@@ -111,6 +118,23 @@ public static class RackRateLimits
 
               ⚠️ مفيش مفتاح ولا هوية هنا — الـIP هو كل اللي عندنا.
             */
+            /*
+              ===== دخول اللوحة =====
+
+              🔴 **كان ناقص خالص من المشروع الجديد.** القديم عنده الحد ده
+              على صفحة الدخول من أول يوم، والجديد كان بيقبل محاولات من غير
+              عدد على حسابات المالك — يعني تخمين باسورد مفتوح على النت.
+              اتلقط وقت تجهيز اللوحة على موقع لوحدها.
+
+              ⚠️ والاسم مقروء من جسم JSON قبل الحد (`LoginNameCapture`)
+              لأن دالة التقسيم متزامنة ومش بتقدر تقرا الجسم.
+            */
+            limiter.AddPolicy(WebLogin, http =>
+                !HttpMethods.IsPost(http.Request.Method)
+                    ? RateLimitPartition.GetNoLimiter("login:get")
+                    : Fixed(options.WebLogin,
+                            "login:" + Ip(http) + "|" + LoginNameCapture.From(http)));
+
             limiter.AddPolicy(RackRegister, http =>
                 Fixed(options.RackRegister, "register:" + Ip(http)));
 

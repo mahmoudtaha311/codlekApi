@@ -9,6 +9,8 @@ using Codlek.Core.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Codlek.Api.Racks;
 
 namespace Codlek.Api.Controllers;
 
@@ -19,6 +21,8 @@ public sealed class AuthController(ISender sender) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(RackRateLimits.WebLogin)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login(
