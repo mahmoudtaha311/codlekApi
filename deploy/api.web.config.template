@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  web.config for the NEW API on its own IIS site (MonsterASP).
+
+  TEMPLATE ONLY - the real file carries secrets and is generated outside the
+  repository (deploy/*.generated.config is git-ignored). Replace every
+  __PLACEHOLDER__ and upload it ONCE; later deploys skip web.config.
+
+  - __CONNECTION_STRING__  the site's own database (a TEST copy for staging)
+  - __JWT_KEY__            at least 32 random characters; whoever knows it can
+                           mint a token for any account
+  - __API_URL__            this site's public address, e.g. https://api-test.runasp.net
+                           Racks registered here are told to sync to it. Left at
+                           the production default, a TEST rack would upload to
+                           PRODUCTION.
+  - __DASHBOARD_URL__      the dashboard site's address, e.g. https://dash-test.runasp.net
+                           (QR labels redirect to it; the browser may call this API from it)
+-->
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <aspNetCore processPath="dotnet" arguments=".\Codlek.Api.dll" stdoutLogEnabled="false"
+                  stdoutLogFile=".\logs\stdout" hostingModel="inprocess">
+        <environmentVariables>
+          <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+          <environmentVariable name="ConnectionStrings__SqlServer" value="__CONNECTION_STRING__" />
+          <environmentVariable name="Jwt__Key" value="__JWT_KEY__" />
+          <environmentVariable name="Server__PublicBaseUrl" value="__API_URL__" />
+          <environmentVariable name="Server__DashboardBaseUrl" value="__DASHBOARD_URL__/app" />
+          <environmentVariable name="Cors__AllowedOrigins__0" value="__DASHBOARD_URL__" />
+        </environmentVariables>
+      </aspNetCore>
+    </system.webServer>
+  </location>
+</configuration>

@@ -18,3 +18,10 @@ secrets.json
 publish/
 TestResults/
 *.trx
+
+# ===== Deploy secrets - never committed =====
+# Publish profiles carry the host password; generated web.config files
+# carry the connection string and the JWT key.
+*.PublishSettings
+*.publishsettings
+deploy/*.generated.config
