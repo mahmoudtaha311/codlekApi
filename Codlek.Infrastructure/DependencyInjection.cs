@@ -99,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<IRackAuthenticator, RackAuthenticator>();
         services.AddScoped<IDeviceCodeLeaseRepository, DeviceCodeLeaseRepository>();
         services.AddSingleton<IWorkbookWriter, Spreadsheets.XlsxWriter>();
+        services.AddSingleton<IDeviceLabelRenderer, Labels.QrDeviceLabelRenderer>();
         services.AddScoped<IDeviceReference, DeviceReference>();
         services.AddScoped<ITenantCounters, TenantCounters>();
         services.AddScoped<IDeviceWorkflowRecorder, DeviceWorkflowRecorder>();

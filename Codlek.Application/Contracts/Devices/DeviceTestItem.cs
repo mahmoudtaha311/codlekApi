@@ -22,6 +22,26 @@ namespace Codlek.Application.Contracts.Devices;
 /// <para>⚠️ وفاضية في الغالبية العظمى من الفحوص القديمة — التاب
 /// لازم يفلتر الفاضي بدل ما يعرض صفوف فاضية.</para>
 /// </param>
+/// <param name="ApplicationVersion">
+/// نسخة برنامج الراكة اللي عملت الفحص — <b>من الحمولة الخام، مش
+/// عمود</b>. والناقصة «غير متاح»، بنفس كلمة صفحة الفحص.
+///
+/// <para>⚠️ <b>ده اللي بيجاوب «ليه الفحصين دول مختلفين»</b>: نفس
+/// اللاب اتفحص بنسختين وقايمة المراحل اتغيّرت بينهم.</para>
+/// </param>
+/// <param name="TestDefinitionVersion">نسخة تعريف الفحوص — نفس القاعدة.</param>
+/// <param name="NotRunCount">
+/// 🔴 <b>بيتعدّ من المراحل وقت العرض (<c>Status == 0</c>)، زي تاب
+/// القديم بالظبط — مش العمود المخزّن على الفحص.</b>
+///
+/// <para>العمود <c>Report.NotRunCount</c> اتضاف بقيمة افتراضية صفر
+/// ومااتملاش للفحوص اللي قبل ٢١-٩-٢٠٢٦، فلو قريناه كانت الشارة
+/// «N مااتنفذش» هتختفي من كل فحص قديم.</para>
+///
+/// <para>⚠️ عشان كده الرقم ده ممكن يختلف عن نفس الرقم في صفحة الفحص
+/// وقايمة الفحوص (اللي بيقروا العمود): العدّ بيحسب كمان مراحل مالهاش
+/// نتيجة زي التسليم. توحيدهم مستني قرار صاحب الشغل.</para>
+/// </param>
 public sealed record DeviceTestItem(
     Guid ReportId,
     DateTime StartedAtUtc,
@@ -33,4 +53,7 @@ public sealed record DeviceTestItem(
     string RackCode,
     TestCounts Counts,
     int StepCount,
+    string ApplicationVersion,
+    string TestDefinitionVersion,
+    int NotRunCount,
     string GeneralNote = "");

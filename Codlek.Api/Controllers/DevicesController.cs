@@ -2,9 +2,11 @@ using Codlek.Api.Authorization;
 using Codlek.Api.Extensions;
 using Codlek.Application.Contracts.Common;
 using Codlek.Application.Contracts.Devices;
+using Codlek.Application.Features.Devices.AddNote;
 using Codlek.Application.Features.Devices.GetDevice;
 using Codlek.Application.Features.Devices.GetDevices;
 using Codlek.Application.Features.Devices.GetIdentifiers;
+using Codlek.Application.Features.Devices.GetLabel;
 using Codlek.Application.Features.Devices.GetNotes;
 using Codlek.Application.Features.Devices.GetTests;
 using Codlek.Application.Features.Devices.GetTimeline;
@@ -129,6 +131,55 @@ public sealed class DevicesController(ISender sender) : ControllerBase
         var result = await sender.Send(new GetDeviceNotesQuery(id), ct);
 
         return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    /// <summary>
+    /// ملاحظة جديدة على اللاب — <b>بتتضاف وبس</b>.
+    ///
+    /// <para>⚠️ <b>والرد هو الملاحظة نفسها بنفس شكل القايمة</b> — اللوحة
+    /// تحطها فوق القايمة من غير ما تعيد القراية. ومفيش تعديل ولا مسح:
+    /// التصحيح ملاحظة جديدة.</para>
+    /// </summary>
+    [HttpPost("{id:guid}/notes")]
+    [ProducesResponseType<DeviceNoteItem>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> AddNote(
+        Guid id, [FromBody] AddDeviceNoteRequest body, CancellationToken ct)
+    {
+        var result = await sender.Send(new AddDeviceNoteCommand(id, body.Body), ct);
+
+        return result.IsSuccess ? Ok(result.Value) : result.ToProblem();
+    }
+
+    /// <summary>
+    /// ليبل الـQR — <b>SVG متولّد على السيرفر</b>.
+    ///
+    /// <para>🔴 <b>على السيرفر عشان الرمز يطلع نفس رمز القديم بالحرف</b>
+    /// (نفس المكتبة ونفس الإعدادات) — والليبلات المطبوعة من الشاشة
+    /// القديمة ملزوقة على لابات.</para>
+    ///
+    /// <para>⚠️ <b><c>&lt;img src&gt;</c> مابيبعتش التوكن</b> — اللوحة
+    /// لازم تجيبه بـ<c>fetch</c> مع التوكن. والناتج مفيهوش أي نص من
+    /// المستخدم، فحطّه جوّه الصفحة آمن.</para>
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>مفيش <c>[Produces]</c> عن قصد:</b> كان هيقيّد رد الفشل
+    /// كمان على <c>image/svg+xml</c>، ومفيش كاتب بيكتب
+    /// <c>ProblemDetails</c> بالشكل ده — فالـ<c>404</c> كان هيبقى
+    /// <c>406</c> من غير رسالة.
+    /// </remarks>
+    [HttpGet("{id:guid}/qr.svg")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK, "image/svg+xml")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Label(
+        Guid id, CancellationToken ct)
+    {
+        var result = await sender.Send(new GetDeviceLabelQuery(id), ct);
+
+        return result.IsSuccess
+            ? Content(result.Value.Svg, DeviceLabel.ContentType)
+            : result.ToProblem();
     }
 
     [HttpGet("{id:guid}/tests")]

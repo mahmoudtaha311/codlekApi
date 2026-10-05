@@ -1,10 +1,14 @@
+using Codlek.Application.Contracts.Devices;
 using Codlek.Application.Features.Devices;
+using Codlek.Application.Features.Devices.AddNote;
 using Codlek.Application.Features.Devices.GetIdentifiers;
+using Codlek.Application.Features.Devices.GetLabel;
 using Codlek.Application.Features.Devices.GetNotes;
 using Codlek.Application.Features.Devices.GetTests;
 using Codlek.Application.Features.Devices.GetTimeline;
 using Codlek.Core.Devices;
 using Codlek.Application.Features.Devices.LookupDevice;
+using Codlek.Application.Interfaces;
 using Codlek.Application.Interfaces.Repositories;
 using Codlek.Core.Entities;
 using Codlek.Core.Enums;
@@ -122,6 +126,32 @@ public class DeviceDetailSliceTests
                     .OrderByDescending(n => n.CreatedAtUtc)
                     .ThenByDescending(n => n.Id)
                     .ToList());
+
+        /// <summary>
+        /// ⚠️ <b>بيحاكي الحفظ:</b> بيدّي المعرّف وقت الإضافة — الرد
+        /// بيرجّع المعرّف، والفحص بيقيس إنه مش صفر.
+        /// </summary>
+        public void AddNote(DeviceNote note)
+        {
+            note.Id = Notes.Count + 1;
+            Notes.Add(note);
+        }
+
+        /// <summary>⚠️ نسخ الفحوص — الفحص بيزرعها بالمعرّف.</summary>
+        public readonly Dictionary<Guid, ReportVersionFacts> Versions = [];
+
+        /// <summary>⚠️ بيحفظ المعرّفات اللي اتطلبت — عشان نتأكد إنها قراية واحدة للصفحة.</summary>
+        public readonly List<IReadOnlyCollection<Guid>> VersionCalls = [];
+
+        public Task<IReadOnlyDictionary<Guid, ReportVersionFacts>> TestVersionsAsync(
+            Guid t, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+        {
+            VersionCalls.Add(ids);
+
+            return Task.FromResult<IReadOnlyDictionary<Guid, ReportVersionFacts>>(
+                Versions.Where(v => ids.Contains(v.Key))
+                    .ToDictionary(v => v.Key, v => v.Value));
+        }
 
         public Task<(IReadOnlyList<DeviceTestRow> Rows, int TotalItems)> TestsAsync(
             Guid t, Guid id, int page, int size, CancellationToken ct = default) =>
@@ -800,6 +830,349 @@ public class DeviceDetailSliceTests
     }
 
     // =================================================================
+    //  نسخ البرنامج على كل فحص
+    // =================================================================
+
+    /// <summary>
+    /// 🔴 <b>كل فحص شايل نسخته — والناقصة «غير متاح».</b>
+    ///
+    /// <para>القديم كان بيعرض النسختين في كل صف من تاب الفحوص، وده
+    /// اللي بيجاوب «ليه الفحصين دول مختلفين». والفحص اللي مالوش صف
+    /// (أو قيمته فاضية) بنفس كلمة صفحة الفحص.</para>
+    /// </summary>
+    [Fact]
+    public async Task Each_test_carries_its_own_versions_or_unavailable()
+    {
+        var (repo, me, device) = Build();
+
+        var full = NewTest();
+        var blank = NewTest();
+        var missing = NewTest();
+
+        repo.Tests.AddRange([full, blank, missing]);
+        repo.Versions[full.ReportId] = new ReportVersionFacts("2.4.1", "7");
+        repo.Versions[blank.ReportId] = new ReportVersionFacts("  ", null);
+
+        var result = await new GetDeviceTestsQueryHandler(repo, me)
+            .Handle(new GetDeviceTestsQuery(device.Id, null, null), default);
+
+        var rows = result.Value.Items.ToList();
+
+        Assert.Equal("2.4.1", rows[0].ApplicationVersion);
+        Assert.Equal("7", rows[0].TestDefinitionVersion);
+
+        Assert.Equal("غير متاح", rows[1].ApplicationVersion);
+        Assert.Equal("غير متاح", rows[1].TestDefinitionVersion);
+
+        Assert.Equal("غير متاح", rows[2].ApplicationVersion);
+        Assert.Equal("غير متاح", rows[2].TestDefinitionVersion);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>قراية واحدة للصفحة، بمعرّفات الصفحة بس</b> — مش قراية
+    /// لكل فحص، ومش لكل فحوص اللاب.
+    /// </summary>
+    [Fact]
+    public async Task The_versions_are_read_once_for_the_page_rows_only()
+    {
+        var (repo, me, device) = Build();
+
+        for (int i = 0; i < 30; i++) repo.Tests.Add(NewTest());
+
+        var result = await new GetDeviceTestsQueryHandler(repo, me)
+            .Handle(new GetDeviceTestsQuery(device.Id, 2, 25), default);
+
+        var call = Assert.Single(repo.VersionCalls);
+
+        Assert.Equal(
+            result.Value.Items.Select(i => i.ReportId).OrderBy(x => x),
+            call.OrderBy(x => x));
+        Assert.Equal(5, call.Count);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>«مااتنفذش» بيعدّي من صف المستودع زي ما هو</b> — والمستودع
+    /// بيعدّه من المراحل (<c>Status == 0</c>) زي تاب القديم؛ المعالج
+    /// مابيحسبش ولا بيقرا العمود المخزّن.
+    /// </summary>
+    [Fact]
+    public async Task The_not_run_count_passes_through_from_the_repository_row()
+    {
+        var (repo, me, device) = Build();
+
+        repo.Tests.Add(NewTest(notRun: 3));
+
+        var result = await new GetDeviceTestsQueryHandler(repo, me)
+            .Handle(new GetDeviceTestsQuery(device.Id, null, null), default);
+
+        Assert.Equal(3, Assert.Single(result.Value.Items).NotRunCount);
+    }
+
+    // =================================================================
+    //  إضافة ملاحظة
+    // =================================================================
+
+    /// <summary>مستخدم باسم طويل — عشان قصّ الاسم على طول العمود.</summary>
+    private sealed class LongNamedUser : ICurrentUser
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public Guid TenantId { get; init; } = Guid.NewGuid();
+        public string DisplayName { get; } = new string('م', 150);
+        public string Code => "U002";
+        public UserRole Role => UserRole.Manager;
+        public bool IsAuthenticated => true;
+    }
+
+    /// <summary>
+    /// 🔴 <b>لاب شركة تانية = <c>404</c> — حتى لو النص فاضي.</b>
+    ///
+    /// <para>القديم بيحمّل اللاب بالشركة <b>قبل</b> ما يبص على النص.
+    /// لو الفراغ اتفحص الأول، الرد كان هيبقى <c>400</c> ويأكّد إن
+    /// المعرّف ده موجود عند حد.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("ملاحظة سليمة")]
+    public async Task A_note_on_another_workshops_device_is_not_found(string body)
+    {
+        var (repo, me, _) = Build();
+        var uow = new FakeUnitOfWork();
+
+        var theirs = new Device { TenantId = Guid.NewGuid(), PublicCode = "LP-00099999" };
+        repo.Devices.Add(theirs);
+
+        var result = await new AddDeviceNoteCommandHandler(repo, uow, me)
+            .Handle(new AddDeviceNoteCommand(theirs.Id, body), default);
+
+        Assert.Equal(DeviceErrors.NotFound, result.Error);
+        Assert.Empty(repo.Notes);
+        Assert.Equal(0, uow.Saves);
+    }
+
+    [Fact]
+    public async Task A_note_on_an_unknown_device_is_not_found()
+    {
+        var (repo, me, _) = Build();
+        var uow = new FakeUnitOfWork();
+
+        var result = await new AddDeviceNoteCommandHandler(repo, uow, me)
+            .Handle(new AddDeviceNoteCommand(Guid.NewGuid(), "نص"), default);
+
+        Assert.Equal(DeviceErrors.NotFound, result.Error);
+        Assert.Equal(0, uow.Saves);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   \n\t ")]
+    public async Task An_empty_note_is_rejected_with_the_legacy_message(string? body)
+    {
+        var (repo, me, device) = Build();
+        var uow = new FakeUnitOfWork();
+
+        var result = await new AddDeviceNoteCommandHandler(repo, uow, me)
+            .Handle(new AddDeviceNoteCommand(device.Id, body), default);
+
+        Assert.Equal(DeviceErrors.NoteEmpty, result.Error);
+        Assert.Equal("اكتب الملاحظة الأول.", result.Error.Description);
+        Assert.Equal(400, result.Error.StatusCode);
+        Assert.Empty(repo.Notes);
+        Assert.Equal(0, uow.Saves);
+    }
+
+    [Fact]
+    public async Task A_note_over_two_thousand_characters_is_rejected()
+    {
+        var (repo, me, device) = Build();
+        var uow = new FakeUnitOfWork();
+
+        var result = await new AddDeviceNoteCommandHandler(repo, uow, me)
+            .Handle(new AddDeviceNoteCommand(device.Id, new string('ن', 2001)), default);
+
+        Assert.Equal(DeviceErrors.NoteTooLong, result.Error);
+        Assert.Equal("الملاحظة أطول من 2000 حرف.", result.Error.Description);
+        Assert.Equal(400, result.Error.StatusCode);
+        Assert.Empty(repo.Notes);
+        Assert.Equal(0, uow.Saves);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>الطول بيتقاس بعد القصّ</b> — زي القديم: ٢٠٠٠ حرف ومعاهم
+    /// مسافات في الطرفين بتعدّي.
+    /// </summary>
+    [Fact]
+    public async Task The_length_is_measured_after_trimming()
+    {
+        var (repo, me, device) = Build();
+
+        var result = await new AddDeviceNoteCommandHandler(repo, new FakeUnitOfWork(), me)
+            .Handle(new AddDeviceNoteCommand(
+                device.Id, "  " + new string('ن', 2000) + "   "), default);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2000, Assert.Single(repo.Notes).Body.Length);
+    }
+
+    /// <summary>
+    /// 🔴 <b>الكاتب والشركة من التوكن، والنص مقصوص، وحفظة واحدة.</b>
+    /// والرد هو الملاحظة بنفس شكل القايمة.
+    /// </summary>
+    [Fact]
+    public async Task The_note_is_saved_with_the_author_from_the_token()
+    {
+        var (repo, me, device) = Build();
+        var uow = new FakeUnitOfWork();
+
+        var result = await new AddDeviceNoteCommandHandler(repo, uow, me)
+            .Handle(new AddDeviceNoteCommand(device.Id, "  الشاشة مشروخة من الركن  "), default);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, uow.Saves);
+
+        var note = Assert.Single(repo.Notes);
+
+        Assert.Equal(me.TenantId, note.TenantId);
+        Assert.Equal(device.Id, note.DeviceId);
+        Assert.Equal("الشاشة مشروخة من الركن", note.Body);
+        Assert.Equal(me.Id, note.CreatedByUserId);
+        Assert.Equal("كريم", note.CreatedByName);
+        Assert.True((DateTime.UtcNow - note.CreatedAtUtc).Duration() < TimeSpan.FromMinutes(1));
+
+        Assert.NotEqual(0, result.Value.Id);
+        Assert.Equal(note.Id, result.Value.Id);
+        Assert.Equal(note.Body, result.Value.Body);
+        Assert.Equal("كريم", result.Value.CreatedByName);
+        Assert.Equal(note.CreatedAtUtc, result.Value.CreatedAtUtc);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>والمدموج بياخد ملاحظة</b> — صفحته بتفتح في القديم والفورم
+    /// فيها.
+    /// </summary>
+    [Fact]
+    public async Task A_merged_device_still_takes_a_note()
+    {
+        var (repo, me, device) = Build();
+        device.Status = DeviceLifecycleStatus.Merged;
+
+        var result = await new AddDeviceNoteCommandHandler(repo, new FakeUnitOfWork(), me)
+            .Handle(new AddDeviceNoteCommand(device.Id, "اندمج في لاب تاني"), default);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(repo.Notes);
+    }
+
+    /// <summary>
+    /// ⚠️ <b>اسم أطول من العمود بيتقصّ</b> — بدل ما الحفظ يقع والملاحظة
+    /// تضيع.
+    /// </summary>
+    [Fact]
+    public async Task A_long_author_name_is_clipped_to_the_column()
+    {
+        var repo = new FakeDeviceRepository();
+        var me = new LongNamedUser();
+        var device = new Device { TenantId = me.TenantId, PublicCode = "LP-00000002" };
+        repo.Devices.Add(device);
+
+        var result = await new AddDeviceNoteCommandHandler(repo, new FakeUnitOfWork(), me)
+            .Handle(new AddDeviceNoteCommand(device.Id, "نص"), default);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(120, Assert.Single(repo.Notes).CreatedByName.Length);
+    }
+
+    /// <summary>
+    /// 🔴 <b>الجسم مافيهوش غير النص.</b> لو حد زوّد حقل كاتب أو شركة
+    /// في العقد، العميل يقدر يكتب باسم غيره.
+    /// </summary>
+    [Fact]
+    public void The_note_request_carries_only_the_body()
+    {
+        var properties = typeof(AddDeviceNoteRequest).GetProperties()
+            .Select(p => p.Name)
+            .ToList();
+
+        Assert.Equal(["Body"], properties);
+    }
+
+    // =================================================================
+    //  ليبل الـQR
+    // =================================================================
+
+    /// <summary>رسّام بيسجّل اللي اتطلب منه.</summary>
+    private sealed class RecordingRenderer : IDeviceLabelRenderer
+    {
+        public readonly List<string> Calls = [];
+
+        public string Svg(string publicCode)
+        {
+            Calls.Add(publicCode);
+            return "<svg>" + publicCode + "</svg>";
+        }
+    }
+
+    /// <summary>
+    /// 🔴 <b>اللي بيتشفّر هو الكود العام بالحرف</b> — مش المعرّف
+    /// الداخلي ولا رابط.
+    /// </summary>
+    [Fact]
+    public async Task The_label_encodes_exactly_the_public_code()
+    {
+        var (repo, me, device) = Build();
+        var renderer = new RecordingRenderer();
+
+        var result = await new GetDeviceLabelQueryHandler(repo, renderer, me)
+            .Handle(new GetDeviceLabelQuery(device.Id), default);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["LP-00018425"], renderer.Calls);
+        Assert.Equal("LP-00018425", result.Value.PublicCode);
+        Assert.Equal("<svg>LP-00018425</svg>", result.Value.Svg);
+    }
+
+    /// <summary>
+    /// 🔴 <b>مفيش كود = مفيش ليبل</b> — ولا رمز لسلسلة فاضية ولا
+    /// للمعرّف الداخلي. والرسّام مابيتناداش أصلاً.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task A_device_without_a_public_code_has_no_label(string code)
+    {
+        var (repo, me, device) = Build();
+        device.PublicCode = code;
+        var renderer = new RecordingRenderer();
+
+        var result = await new GetDeviceLabelQueryHandler(repo, renderer, me)
+            .Handle(new GetDeviceLabelQuery(device.Id), default);
+
+        Assert.Equal(DeviceErrors.NoPublicCode, result.Error);
+        Assert.Equal("device.no_public_code", result.Error.Code);
+        Assert.Equal(404, result.Error.StatusCode);
+        Assert.Equal(
+            "الجهاز لسه ماخدش كود عام، فمفيش ليبل دائم يتطبع. الكود بيتسجّل أول ما الراكة تزامن.",
+            result.Error.Description);
+        Assert.Empty(renderer.Calls);
+    }
+
+    [Fact]
+    public async Task Another_workshops_label_is_not_found()
+    {
+        var (repo, me, _) = Build();
+        var renderer = new RecordingRenderer();
+
+        var theirs = new Device { TenantId = Guid.NewGuid(), PublicCode = "LP-00099999" };
+        repo.Devices.Add(theirs);
+
+        var result = await new GetDeviceLabelQueryHandler(repo, renderer, me)
+            .Handle(new GetDeviceLabelQuery(theirs.Id), default);
+
+        Assert.Equal(DeviceErrors.NotFound, result.Error);
+        Assert.Empty(renderer.Calls);
+    }
+
+    // =================================================================
     //  بنّاؤون
     // =================================================================
 
@@ -824,7 +1197,8 @@ public class DeviceDetailSliceTests
 
     private static DeviceTestRow NewTest(
         Guid? rackId = null, string note = "",
-        int pass = 0, int fail = 0, int error = 0, int notPresent = 0, int skip = 0) =>
+        int pass = 0, int fail = 0, int error = 0, int notPresent = 0, int skip = 0,
+        int notRun = 0) =>
         new(
             ReportId: Guid.NewGuid(),
             StartedAtUtc: DateTime.UtcNow.AddHours(-1),
@@ -840,5 +1214,6 @@ public class DeviceDetailSliceTests
             NotPresentCount: notPresent,
             SkipCount: skip,
             StepCount: 12,
-            GeneralNote: note);
+            GeneralNote: note,
+            NotRunCount: notRun);
 }

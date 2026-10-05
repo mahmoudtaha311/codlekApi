@@ -19,9 +19,6 @@ public sealed class GetReportDetailQueryHandler(
     ICurrentUser me)
     : IRequestHandler<GetReportDetailQuery, Result<ReportDetail>>
 {
-    /// <summary>⚠️ النص اللي بيتعرض للقيمة الناقصة في النسخ.</summary>
-    private const string Unavailable = "غير متاح";
-
     public async Task<Result<ReportDetail>> Handle(
         GetReportDetailQuery query, CancellationToken cancellationToken)
     {
@@ -147,15 +144,12 @@ public sealed class GetReportDetailQueryHandler(
             RestoredAtUtc: r.RestoredAtUtc,
 
             // ⚠️ الناقصة بترجع «غير متاح» — زيها زي أي قيمة ناقصة.
-            ApplicationVersion: Text(versions?.ApplicationVersion),
-            TestDefinitionVersion: Text(versions?.TestDefinitionVersion),
+            ApplicationVersion: ReportVersionText.Display(versions?.ApplicationVersion),
+            TestDefinitionVersion: ReportVersionText.Display(versions?.TestDefinitionVersion),
 
             SnapshotComponentCount: components,
             Scope: r.Scope,
             ScopeText: ReportScopeText.Arabic(r.Scope),
             NotRunCount: r.NotRunCount));
     }
-
-    private static string Text(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? Unavailable : value;
 }
