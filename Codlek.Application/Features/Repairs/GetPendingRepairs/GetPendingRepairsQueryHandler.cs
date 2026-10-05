@@ -98,7 +98,8 @@ public sealed class GetPendingRepairsQueryHandler(
                 TechnicianName: item.AssignedTechnician?.DisplayName ?? "",
                 TechnicianOutsideBrand: outsideBrand,
                 Parts: item.Parts.Select(p => p.Name).ToList(),
-                StartedWithoutApproval: item.StartedWithoutApproval));
+                StartedWithoutApproval: item.StartedWithoutApproval,
+                DeviceId: item.DeviceId == Guid.Empty ? null : item.DeviceId));
         }
 
         return Result.Success<IReadOnlyList<PendingRepairRow>>(rows);

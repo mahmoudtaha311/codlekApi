@@ -305,6 +305,24 @@ public class PendingRepairQueueTests
         Assert.True(row.StartedWithoutApproval);
     }
 
+    /// <summary>
+    /// 🔴 <b>الصف بيحمل معرّف اللاب</b> — ومختلف عن معرّف الأمر. رابط رقم
+    /// اللاب في الطابور كان بيبعت معرّف الأمر مكانه، فبيفتح لاب غلط.
+    /// </summary>
+    [Fact]
+    public async Task The_row_carries_the_laptop_id_for_its_link()
+    {
+        var (repo, queue, _) = Build();
+        var item = Item("HP");
+        item.DeviceId = Guid.NewGuid();
+        repo.Pending.Add(item);
+
+        var row = (await queue.Handle(new GetPendingRepairsQuery(), default)).Value!.Single();
+
+        Assert.Equal(item.DeviceId, row.DeviceId);
+        Assert.NotEqual(row.Id, row.DeviceId);
+    }
+
     /// <summary>⚠️ والاسم التجاري بيسبق الموديل الخام.</summary>
     [Fact]
     public async Task The_commercial_model_wins_in_the_device_name()
