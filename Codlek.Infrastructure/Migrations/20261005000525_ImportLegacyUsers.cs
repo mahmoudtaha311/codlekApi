@@ -61,10 +61,17 @@ namespace Codlek.Infrastructure.Migrations
                                 WHERE a.NormalizedUserName = u.NormalizedUsername);
             """;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// ⚠️ <b>جوّه <c>EXEC</c> — مش الجملة على الناشف.</b> سكريبت
+        /// التحويل (<c>migrations script --idempotent</c>) بيطلع دفعة
+        /// واحدة، وSQL Server بيترجم الدفعة كلها قبل ما ينفّذ. قاعدة فيها
+        /// <c>AspNetUsers</c> من غير عمودين التاريخ كانت هترفض الدفعة
+        /// كلها وقت الترجمة؛ الجملة الديناميكية بتتترجم وقت تنفيذها، بعد
+        /// ما العمودين يتضافوا.
+        /// </summary>
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(Sql);
+            migrationBuilder.Sql("EXEC(N'" + Sql.Replace("'", "''") + "');");
         }
 
         /// <summary>

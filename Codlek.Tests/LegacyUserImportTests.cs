@@ -281,6 +281,38 @@ public class LegacyUserImportTests(LegacyUserImportDbFixture fixture)
     }
 
     /// <summary>
+    /// 🔴 <b>حساب اتغيّر اسمه في الجديد بعد النقل مابيتنقلش تاني.</b>
+    /// فحص الاسم لوحده مش كفاية هنا: الاسم القديم مابقاش موجود، فلو
+    /// مفيش فحص بالمعرّف الجملة بتحاول تضيف نفس المعرّف — وتقع على
+    /// المفتاح الأساسي والهجرة كلها بتفشل.
+    /// </summary>
+    [Fact]
+    public async Task An_account_renamed_after_the_import_is_not_imported_again()
+    {
+        var legacy = await SeedLegacyAsync(Unique("renamed"));
+
+        await ImportAsync();
+
+        string newName = Unique("new.name");
+
+        using (var db = fixture.Create())
+        {
+            var row = await db.Users.SingleAsync(u => u.Id == legacy.Id);
+            row.UserName = newName;
+            row.NormalizedUserName = Core.Text.LoginName.Normalize(newName);
+            await db.SaveChangesAsync();
+        }
+
+        await ImportAsync();
+
+        using var after = fixture.Create();
+
+        var only = await after.Users.SingleAsync(u => u.Id == legacy.Id);
+
+        Assert.Equal(newName, only.UserName);
+    }
+
+    /// <summary>
     /// ⚠️ <b>اسم محجوز في الجديد لحساب تاني = الصف القديم بيتساب.</b>
     /// مابيوقّعش الهجرة كلها، ومابيدهسش الحساب الموجود.
     /// </summary>
